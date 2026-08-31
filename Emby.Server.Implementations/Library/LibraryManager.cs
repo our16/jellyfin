@@ -1451,6 +1451,220 @@ namespace Emby.Server.Implementations.Library
         }
 
         /// <inheritdoc />
+        public async Task IncrementalScanAsync(IEnumerable<string> paths, CancellationToken cancellationToken)
+        {
+            var pathList = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (pathList.Count == 0)
+            {
+                return;
+            }
+
+            _logger.LogInformation("Starting incremental scan for {Count} paths", pathList.Count);
+
+            // Group paths by their parent folder
+            var pathsByParent = new Dictionary<Folder, List<string>>(new FolderEqualityComparer());
+
+            foreach (var path in pathList)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                try
+                {
+                    var fileInfo = _fileSystem.GetFileSystemInfo(path);
+                    if (fileInfo == null || (!fileInfo.Exists && !Directory.Exists(path)))
+                    {
+                        // Path was deleted - find the item and remove it
+                        await HandleDeletedPathAsync(path, cancellationToken);
+                        continue;
+                    }
+
+                    // Find the parent folder
+                    var parentFolder = FindParentFolder(path);
+                    if (parentFolder != null)
+                    {
+                        if (!pathsByParent.TryGetValue(parentFolder, out var list))
+                        {
+                            list = [];
+                            pathsByParent[parentFolder] = list;
+                        }
+                        list.Add(path);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing path {Path} in incremental scan", path);
+                }
+            }
+
+            // Process each parent folder's changed files
+            foreach (var kvp in pathsByParent)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var parent = kvp.Key;
+                var changedPaths = kvp.Value;
+
+                try
+                {
+                    await ProcessIncrementalChangesAsync(parent, changedPaths, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing incremental changes for folder {Folder}", parent.Name);
+                }
+            }
+
+            _logger.LogInformation("Incremental scan completed for {Count} paths", pathList.Count);
+        }
+
+        /// <summary>
+        /// Finds the parent folder for a given path.
+        /// </summary>
+        private Folder? FindParentFolder(string path)
+        {
+            var directory = Path.GetDirectoryName(path);
+            if (string.IsNullOrEmpty(directory))
+            {
+                return null;
+            }
+
+            // Find the folder item that contains this path
+            var item = FindByPath(directory, true);
+            if (item is Folder folder)
+            {
+                return folder;
+            }
+
+            // Walk up the directory tree to find a folder
+            var currentDir = directory;
+            while (!string.IsNullOrEmpty(currentDir))
+            {
+                item = FindByPath(currentDir, true);
+                if (item is Folder f)
+                {
+                    return f;
+                }
+                currentDir = Path.GetDirectoryName(currentDir);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Handles a deleted path by finding and removing the corresponding item.
+        /// </summary>
+        private async Task HandleDeletedPathAsync(string path, CancellationToken cancellationToken)
+        {
+            var item = FindByPath(path, null);
+            if (item != null)
+            {
+                _logger.LogInformation("Item deleted externally: {Path}", path);
+                DeleteItem(item, new DeleteOptions { DeleteFileLocation = false }, item.GetOwner() ?? item.GetParent(), false);
+            }
+            else
+            {
+                // Path might be a parent folder - check children
+                var parent = FindByPath(Path.GetDirectoryName(path) ?? "", true);
+                if (parent is Folder folder)
+                {
+                    // Trigger a quick validation of this folder
+                    await folder.ValidateChildren(
+                        new Progress<double>(),
+                        new MetadataRefreshOptions(new DirectoryService(_fileSystem)),
+                        recursive: false,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Processes incremental changes for a specific parent folder.
+        /// </summary>
+        private async Task ProcessIncrementalChangesAsync(Folder parent, List<string> changedPaths, CancellationToken cancellationToken)
+        {
+            _logger.LogDebug("Processing {Count} incremental changes for folder {Folder}", changedPaths.Count, parent.Name);
+
+            var directoryService = new DirectoryService(_fileSystem);
+            var collectionType = GetContentType(parent);
+            var libraryOptions = GetLibraryOptions(parent);
+
+            // Resolve the changed files
+            var fileInfos = changedPaths
+                .Select(p => _fileSystem.GetFileSystemInfo(p))
+                .Where(fi => fi != null)
+                .Cast<FileSystemMetadata>()
+                .ToList();
+
+            if (fileInfos.Count == 0)
+            {
+                return;
+            }
+
+            // Resolve paths to items
+            var resolvedItems = ResolvePaths(fileInfos, directoryService, parent, libraryOptions, collectionType).ToList();
+
+            // Batch create/update items
+            if (resolvedItems.Count > 0)
+            {
+                var newItems = new List<BaseItem>();
+                var updatedItems = new List<BaseItem>();
+
+                foreach (var item in resolvedItems)
+                {
+                    if (item.Id.IsEmpty())
+                    {
+                        item.Id = GetNewItemId(item.Path ?? item.Name, item.GetType());
+                    }
+
+                    var existing = GetItemById(item.Id);
+                    if (existing != null)
+                    {
+                        if (existing.UpdateFromResolvedItem(item) > ItemUpdateType.None)
+                        {
+                            updatedItems.Add(existing);
+                        }
+                    }
+                    else
+                    {
+                        item.SetParent(parent);
+                        newItems.Add(item);
+                    }
+                }
+
+                if (newItems.Count > 0)
+                {
+                    CreateItems(newItems, parent, cancellationToken);
+                }
+
+                if (updatedItems.Count > 0)
+                {
+                    _persistenceService.SaveItems(updatedItems, cancellationToken);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Equality comparer for Folder objects based on ID.
+        /// </summary>
+        private sealed class FolderEqualityComparer : IEqualityComparer<Folder>
+        {
+            public bool Equals(Folder? x, Folder? y)
+            {
+                if (x is null && y is null) return true;
+                if (x is null || y is null) return false;
+                return x.Id.Equals(y.Id);
+            }
+
+            public int GetHashCode(Folder obj) => obj.Id.GetHashCode();
+        }
+
+        /// <inheritdoc />
         public void ClearIgnoreRuleCache()
         {
             _dotIgnoreIgnoreRule.ClearDirectoryCache();

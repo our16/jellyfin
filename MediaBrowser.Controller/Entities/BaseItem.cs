@@ -1717,7 +1717,7 @@ namespace MediaBrowser.Controller.Entities
             return list;
         }
 
-        internal virtual ItemUpdateType UpdateFromResolvedItem(BaseItem newItem)
+        public virtual ItemUpdateType UpdateFromResolvedItem(BaseItem newItem)
         {
             var updateType = ItemUpdateType.None;
 

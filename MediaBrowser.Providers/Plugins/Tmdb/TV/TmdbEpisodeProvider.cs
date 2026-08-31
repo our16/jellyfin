@@ -11,10 +11,13 @@ using Jellyfin.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using TMDbLib.Objects.TvShows;
+
+#pragma warning disable CS8602
 
 namespace MediaBrowser.Providers.Plugins.Tmdb.TV
 {
@@ -42,6 +45,162 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
 
         /// <inheritdoc />
         public string Name => TmdbUtils.ProviderName;
+
+        private MetadataResult<Episode> BuildEpisodeMetadata(TvEpisode tmdbEpisode, Episode episode, PluginConfiguration config, MetadataRefreshOptions refreshOptions)
+        {
+            if (config == null)
+            {
+                return new MetadataResult<Episode>();
+            }
+
+            var metadataResult = new MetadataResult<Episode>();
+
+            if (string.IsNullOrEmpty(tmdbEpisode.Overview))
+            {
+                return metadataResult;
+            }
+
+            metadataResult.HasMetadata = true;
+            metadataResult.QueriedById = true;
+            metadataResult.ResultLanguage = episode.GetLookupInfo().MetadataLanguage;
+
+            var item = new Episode
+            {
+                IndexNumber = (int?)tmdbEpisode.EpisodeNumber,
+                ParentIndexNumber = (int?)tmdbEpisode.SeasonNumber,
+                Name = tmdbEpisode.Name,
+                PremiereDate = tmdbEpisode.AirDate.HasValue
+                    ? DateTime.SpecifyKind(tmdbEpisode.AirDate.Value, DateTimeKind.Local).ToUniversalTime()
+                    : null,
+                ProductionYear = tmdbEpisode.AirDate?.Year,
+                Overview = tmdbEpisode.Overview,
+                CommunityRating = Convert.ToSingle(tmdbEpisode.VoteAverage)
+            };
+
+            var externalIds = tmdbEpisode.ExternalIds;
+            item.TrySetProviderId(MetadataProvider.Tvdb, externalIds?.TvdbId);
+            item.TrySetProviderId(MetadataProvider.Imdb, externalIds?.ImdbId);
+            item.TrySetProviderId(MetadataProvider.TvRage, externalIds?.TvrageId);
+
+            if (tmdbEpisode.Videos?.Results is not null)
+            {
+                foreach (var video in tmdbEpisode.Videos.Results)
+                {
+                    if (TmdbUtils.IsTrailerType(video))
+                    {
+                        item.AddTrailerUrl("https://www.youtube.com/watch?v=" + video.Key);
+                    }
+                }
+            }
+
+            var credits = tmdbEpisode.Credits;
+
+            if (credits?.Cast is not null)
+            {
+                var castQuery = config.HideMissingCastMembers
+                    ? credits.Cast.Where(a => !string.IsNullOrEmpty(a.ProfilePath)).OrderBy(a => a.Order)
+                    : credits.Cast.OrderBy(a => a.Order);
+
+                foreach (var actor in castQuery.Take(config.MaxCastMembers))
+                {
+                    if (string.IsNullOrWhiteSpace(actor.Name))
+                    {
+                        continue;
+                    }
+
+                    var personInfo = new PersonInfo
+                    {
+                        Name = actor.Name.Trim(),
+                        Role = actor.Character?.Trim() ?? string.Empty,
+                        Type = PersonKind.Actor,
+                        SortOrder = actor.Order,
+                        ImageUrl = _tmdbClientManager.GetProfileUrl(actor.ProfilePath)
+                    };
+
+                    if (actor.Id > 0)
+                    {
+                        personInfo.SetProviderId(MetadataProvider.Tmdb, actor.Id.ToString(CultureInfo.InvariantCulture));
+                    }
+
+                    metadataResult.AddPerson(personInfo);
+                }
+            }
+
+            if (credits?.GuestStars is not null)
+            {
+                var guestQuery = config.HideMissingCastMembers
+                    ? credits.GuestStars.Where(a => !string.IsNullOrEmpty(a.ProfilePath)).OrderBy(a => a.Order)
+                    : credits.GuestStars.OrderBy(a => a.Order);
+
+                foreach (var guest in guestQuery.Take(config.MaxCastMembers))
+                {
+                    if (string.IsNullOrWhiteSpace(guest.Name))
+                    {
+                        continue;
+                    }
+
+                    var personInfo = new PersonInfo
+                    {
+                        Name = guest.Name.Trim(),
+                        Role = guest.Character?.Trim() ?? string.Empty,
+                        Type = PersonKind.GuestStar,
+                        SortOrder = guest.Order,
+                        ImageUrl = _tmdbClientManager.GetProfileUrl(guest.ProfilePath)
+                    };
+
+                    if (guest.Id > 0)
+                    {
+                        personInfo.SetProviderId(MetadataProvider.Tmdb, guest.Id.ToString(CultureInfo.InvariantCulture));
+                    }
+
+                    metadataResult.AddPerson(personInfo);
+                }
+            }
+
+            if (credits?.Crew is not null)
+            {
+                var crewQuery = credits.Crew
+                    .Select(crewMember => new
+                    {
+                        CrewMember = crewMember,
+                        PersonType = TmdbUtils.MapCrewToPersonType(crewMember)
+                    })
+                    .Where(entry => TmdbUtils.WantedCrewKinds.Contains(entry.PersonType));
+
+                if (config.HideMissingCrewMembers)
+                {
+                    crewQuery = crewQuery.Where(entry => !string.IsNullOrEmpty(entry.CrewMember.ProfilePath));
+                }
+
+                foreach (var entry in crewQuery.Take(config.MaxCrewMembers))
+                {
+                    var crewMember = entry.CrewMember;
+
+                    if (string.IsNullOrWhiteSpace(crewMember.Name))
+                    {
+                        continue;
+                    }
+
+                    var personInfo = new PersonInfo
+                    {
+                        Name = crewMember.Name.Trim(),
+                        Role = crewMember.Job?.Trim() ?? string.Empty,
+                        Type = entry.PersonType,
+                        ImageUrl = _tmdbClientManager.GetProfileUrl(crewMember.ProfilePath)
+                    };
+
+                    if (crewMember.Id > 0)
+                    {
+                        personInfo.SetProviderId(MetadataProvider.Tmdb, crewMember.Id.ToString(CultureInfo.InvariantCulture));
+                    }
+
+                    metadataResult.AddPerson(personInfo);
+                }
+            }
+
+            metadataResult.Item = item;
+            return metadataResult;
+        }
 
         /// <inheritdoc />
         public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(EpisodeInfo searchInfo, CancellationToken cancellationToken)
@@ -81,7 +240,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
         public async Task<MetadataResult<Episode>> GetMetadata(EpisodeInfo info, CancellationToken cancellationToken)
         {
             var metadataResult = new MetadataResult<Episode>();
-            var config = Plugin.Instance.Configuration;
+            var config = Plugin.Instance?.Configuration;
 
             // Allowing this will dramatically increase scan times
             if (info.IsMissingEpisode)
@@ -206,7 +365,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
 
             var credits = episodeResult.Credits;
 
-            if (credits?.Cast is not null)
+            if (credits?.Cast is not null && config != null)
             {
                 var castQuery = config.HideMissingCastMembers
                     ? credits.Cast.Where(a => !string.IsNullOrEmpty(a.ProfilePath)).OrderBy(a => a.Order)

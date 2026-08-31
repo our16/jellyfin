@@ -783,13 +783,22 @@ namespace MediaBrowser.Controller.Library
 
         BaseItem GetParentItem(Guid? parentId, Guid? userId);
 
-        /// <summary>
-        /// Queue a library scan.
-        /// </summary>
-        /// <remarks>
-        /// This exists so plugins can trigger a library scan.
-        /// </remarks>
-        void QueueLibraryScan();
+/// <summary>
+/// Queue a library scan.
+/// </summary>
+/// <remarks>
+/// This exists so plugins can trigger a library scan.
+/// </remarks>
+void QueueLibraryScan();
+
+/// <summary>
+/// Performs an incremental scan of specific file paths.
+/// Only processes the changed files instead of full library validation.
+/// </summary>
+/// <param name="paths">The file paths that have changed.</param>
+/// <param name="cancellationToken">The cancellation token.</param>
+/// <returns>A task representing the asynchronous operation.</returns>
+Task IncrementalScanAsync(IEnumerable<string> paths, CancellationToken cancellationToken);
 
         /// <summary>
         /// Add mblink file for a media path.

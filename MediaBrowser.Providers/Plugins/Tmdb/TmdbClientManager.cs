@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Dto;
@@ -300,6 +301,56 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
             }
 
             return episode;
+        }
+
+        /// <summary>
+        /// Gets all episodes for a season in a single API call.
+        /// </summary>
+        /// <param name="tvShowId">The tv show's TMDb id.</param>
+        /// <param name="seasonNumber">The season number.</param>
+        /// <param name="displayOrder">The display order.</param>
+        /// <param name="language">The language.</param>
+        /// <param name="imageLanguages">A comma-separated list of image languages.</param>
+        /// <param name="countryCode">The country code, ISO 3166-1.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>A list of TMDb tv episodes for the season.</returns>
+        public async Task<IReadOnlyList<TvEpisode>?> GetSeasonEpisodesAsync(int tvShowId, int seasonNumber, string displayOrder, string? language, string? imageLanguages, string? countryCode, CancellationToken cancellationToken)
+        {
+            var key = $"season-episodes-{tvShowId.ToString(CultureInfo.InvariantCulture)}-s{seasonNumber.ToString(CultureInfo.InvariantCulture)}-{displayOrder}-{language}";
+            if (_memoryCache.TryGetValue(key, out IReadOnlyList<TvEpisode>? episodes))
+            {
+                return episodes;
+            }
+
+            await EnsureClientConfigAsync().ConfigureAwait(false);
+
+            // Use GetTvSeasonAsync which returns all episodes for a season in one call
+            var season = await _tmDbClient.GetTvSeasonAsync(
+                tvShowId,
+                seasonNumber,
+                language: TmdbUtils.NormalizeLanguage(language, countryCode),
+                includeImageLanguage: imageLanguages,
+                extraMethods: TvSeasonMethods.Credits | TvSeasonMethods.Images | TvSeasonMethods.ExternalIds | TvSeasonMethods.Videos,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            if (season?.Episodes != null && season.Episodes.Count > 0)
+            {
+                // Fetch each episode individually to get full details
+                var episodeList = new List<TvEpisode>();
+                foreach (var se in season.Episodes)
+                {
+                    var ep = await GetEpisodeAsync(tvShowId, seasonNumber, se.EpisodeNumber, displayOrder, language, imageLanguages, countryCode, cancellationToken).ConfigureAwait(false);
+                    if (ep != null)
+                    {
+                        episodeList.Add(ep);
+                    }
+                }
+                episodes = episodeList;
+                _memoryCache.Set(key, episodes, TimeSpan.FromHours(CacheDurationInHours));
+                return episodes;
+            }
+
+            return null;
         }
 
         /// <summary>

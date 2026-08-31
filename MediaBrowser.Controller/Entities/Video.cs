@@ -497,7 +497,7 @@ namespace MediaBrowser.Controller.Entities
                 .OrderBy(i => i.SortName);
         }
 
-        internal override ItemUpdateType UpdateFromResolvedItem(BaseItem newItem)
+        public override ItemUpdateType UpdateFromResolvedItem(BaseItem newItem)
         {
             var updateType = base.UpdateFromResolvedItem(newItem);
 

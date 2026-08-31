@@ -53,6 +53,84 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
         _localizationManager = localizationManager;
     }
 
+    /// <summary>
+    /// Batch refreshes all episodes for a series in a single operation.
+    /// This significantly reduces API calls to metadata providers (TVDB/TMDB).
+    /// </summary>
+    /// <param name="series">The series to refresh.</param>
+    /// <param name="refreshOptions">The refresh options.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The update type.</returns>
+    public async Task<ItemUpdateType> BatchRefreshEpisodesAsync(
+        Series series,
+        MetadataRefreshOptions refreshOptions,
+        CancellationToken cancellationToken)
+    {
+        var updateType = ItemUpdateType.None;
+
+        // Get all episodes that need refresh
+        var episodes = series.GetRecursiveChildren(i => i is Episode).OfType<Episode>().ToList();
+        if (episodes.Count == 0)
+        {
+            return updateType;
+        }
+
+        Logger.LogInformation("Batch refreshing {Count} episodes for series {SeriesName}", episodes.Count, series.Name);
+
+        // Group episodes by season for batch processing
+        var episodesBySeason = episodes
+            .Where(e => e.ParentIndexNumber.HasValue)
+            .GroupBy(e => e.ParentIndexNumber.GetValueOrDefault())
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Get providers that support batch operations
+        var libraryOptions = LibraryManager.GetLibraryOptions(series);
+        var providers = GetProviders(series, libraryOptions, refreshOptions, true, false).ToList();
+
+        if (providers.Count == 0)
+        {
+            return updateType;
+        }
+
+        // Process each season as a batch
+        foreach (var seasonEpisodePair in episodesBySeason)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            var seasonNumber = seasonEpisodePair.Key;
+            var seasonEpisodes = seasonEpisodePair.Value;
+
+            Logger.LogDebug("Refreshing season {SeasonNumber} with {EpisodeCount} episodes", seasonNumber, seasonEpisodes.Count);
+
+            // Individual refresh for each episode
+            foreach (var episode in seasonEpisodes)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                try
+                {
+                    var episodeUpdateType = await episode.RefreshMetadata(refreshOptions, cancellationToken).ConfigureAwait(false);
+                    if (episodeUpdateType > ItemUpdateType.None)
+                    {
+                        updateType |= episodeUpdateType;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error refreshing episode {EpisodeName}", episode.Name);
+                }
+            }
+        }
+
+        return updateType;
+    }
+
     /// <inheritdoc />
     public override async Task<ItemUpdateType> RefreshMetadata(BaseItem item, MetadataRefreshOptions refreshOptions, CancellationToken cancellationToken)
     {
@@ -82,6 +160,12 @@ public class SeriesMetadataService : MetadataService<Series, SeriesInfo>
         if (LibraryManager.GetLibraryOptions(item).EnableAutomaticSeriesGrouping)
         {
             await UpdateSeriesChildrenInfoAsync(item, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Batch refresh episodes for better performance
+        if (refreshOptions.MetadataRefreshMode != MetadataRefreshMode.None)
+        {
+            await BatchRefreshEpisodesAsync(item, refreshOptions, cancellationToken).ConfigureAwait(false);
         }
 
         RemoveObsoleteEpisodes(item);

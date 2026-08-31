@@ -1,14 +1,15 @@
-#pragma warning disable CS1591
-
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Logging;
+
+#pragma warning disable CS1591
 
 namespace Emby.Server.Implementations.IO
 {
@@ -103,7 +104,7 @@ namespace Emby.Server.Implementations.IO
             RestartTimer();
         }
 
-        private void OnTimerCallback(object? state)
+        private async void OnTimerCallback(object? state)
         {
             List<string> paths;
 
@@ -119,7 +120,7 @@ namespace Emby.Server.Implementations.IO
 
             try
             {
-                ProcessPathChanges(paths);
+                await ProcessPathChangesAsync(paths);
             }
             catch (Exception ex)
             {
@@ -127,30 +128,46 @@ namespace Emby.Server.Implementations.IO
             }
         }
 
-        private void ProcessPathChanges(List<string> paths)
+        private async Task ProcessPathChangesAsync(List<string> paths)
         {
-            IEnumerable<BaseItem> itemsToRefresh = paths
-                .Distinct()
-                .Select(GetAffectedBaseItem)
-                .Where(item => item is not null)
-                .DistinctBy(x => x!.Id)!;  // Removed null values in the previous .Where()
-
-            foreach (var item in itemsToRefresh)
+            if (paths.Count == 0)
             {
-                if (item is AggregateFolder)
-                {
-                    continue;
-                }
+                return;
+            }
 
-                _logger.LogInformation("{Name} ({Path}) will be refreshed.", item.Name, item.Path);
+            _logger.LogDebug("Processing {Count} path changes incrementally", paths.Count);
 
-                try
+            // Use incremental scan for better performance
+            if (_libraryManager is Emby.Server.Implementations.Library.LibraryManager libManager)
+            {
+                await libManager.IncrementalScanAsync(paths, CancellationToken.None);
+            }
+            else
+            {
+                // Fallback to original behavior
+                IEnumerable<BaseItem> itemsToRefresh = paths
+                    .Distinct()
+                    .Select(GetAffectedBaseItem)
+                    .Where(item => item is not null)
+                    .DistinctBy(x => x!.Id)!;
+
+                foreach (var item in itemsToRefresh)
                 {
-                    item.ChangedExternally();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error refreshing {Name}", item.Name);
+                    if (item is AggregateFolder)
+                    {
+                        continue;
+                    }
+
+                    _logger.LogInformation("{Name} ({Path}) will be refreshed.", item.Name, item.Path);
+
+                    try
+                    {
+                        item.ChangedExternally();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error refreshing {Name}", item.Name);
+                    }
                 }
             }
         }
