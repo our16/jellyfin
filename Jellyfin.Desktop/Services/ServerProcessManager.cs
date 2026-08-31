@@ -31,6 +31,7 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
     private Process? _serverProcess;
     private readonly CancellationTokenSource _outputCts = new();
     private int _restartAttempts;
+    private bool _isStopping;
     private System.Threading.Timer? _healthCheckTimer;
 
     public event Action<bool>? OnServerStatusChanged;
@@ -101,11 +102,18 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
 
             _serverProcess.Exited += (_, _) =>
             {
-                _logger.LogInformation("Server process exited with code {Code}", _serverProcess?.ExitCode);
+                var exitCode = _serverProcess?.ExitCode ?? -1;
+                _logger.LogInformation("Server process exited with code {Code}", exitCode);
                 OnServerStatusChanged?.Invoke(false);
-                OnServerOutput?.Invoke($"服务进程已退出 (代码: {_serverProcess?.ExitCode})");
+                OnServerOutput?.Invoke($"服务进程已退出 (代码: {exitCode})");
 
-                if (_options.RestartOnCrash && _restartAttempts < _options.MaxRestartAttempts)
+                if (_isStopping)
+                {
+                    _logger.LogInformation("Server stopped intentionally, skipping restart");
+                    return;
+                }
+
+                if (_options.RestartOnCrash && _restartAttempts < _options.MaxRestartAttempts && exitCode != 0)
                 {
                     _restartAttempts++;
                     _logger.LogInformation("Scheduling restart attempt {Attempt}/{Max}", _restartAttempts, _options.MaxRestartAttempts);
@@ -153,7 +161,8 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
         await _processLock.WaitAsync(cancellationToken);
         try
         {
-            _healthCheckTimer?.Dispose(); // Timer.DisposeAsync not available in .NET 8
+            _isStopping = true;
+            _healthCheckTimer?.Dispose();
             _healthCheckTimer = null;
 
             if (_serverProcess == null || _serverProcess.HasExited)
@@ -192,6 +201,7 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
         }
         finally
         {
+            _isStopping = false;
             _processLock.Release();
         }
     }
