@@ -29,15 +29,23 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
     private readonly DesktopOptions _options;
     private readonly SemaphoreSlim _processLock = new(1, 1);
     private Process? _serverProcess;
-    private readonly CancellationTokenSource _outputCts = new();
     private int _restartAttempts;
-    private bool _isStopping;
+    private volatile bool _isStopping;
     private System.Threading.Timer? _healthCheckTimer;
+    private CancellationTokenSource? _restartCts;
 
     public event Action<bool>? OnServerStatusChanged;
     public event Action<string>? OnServerOutput;
 
-    public bool IsRunning => _serverProcess != null && !_serverProcess.HasExited;
+    public bool IsRunning
+    {
+        get
+        {
+            var p = _serverProcess;
+            return p != null && !p.HasExited;
+        }
+    }
+
     public int? ProcessId => _serverProcess?.Id;
 
     public ServerProcessManager(ILogger<ServerProcessManager> logger, IOptions<DesktopOptions> options)
@@ -100,27 +108,7 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
                 }
             };
 
-            _serverProcess.Exited += (_, _) =>
-            {
-                var exitCode = _serverProcess?.ExitCode ?? -1;
-                _logger.LogInformation("Server process exited with code {Code}", exitCode);
-                OnServerStatusChanged?.Invoke(false);
-                OnServerOutput?.Invoke($"服务进程已退出 (代码: {exitCode})");
-
-                if (_isStopping)
-                {
-                    _logger.LogInformation("Server stopped intentionally, skipping restart");
-                    return;
-                }
-
-                if (_options.RestartOnCrash && _restartAttempts < _options.MaxRestartAttempts && exitCode != 0)
-                {
-                    _restartAttempts++;
-                    _logger.LogInformation("Scheduling restart attempt {Attempt}/{Max}", _restartAttempts, _options.MaxRestartAttempts);
-                    Task.Delay(TimeSpan.FromSeconds(_options.RestartDelaySeconds))
-                        .ContinueWith(_ => RestartAsync().ConfigureAwait(false));
-                }
-            };
+            _serverProcess.Exited += OnServerExited;
 
             var started = _serverProcess.Start();
             if (!started)
@@ -131,12 +119,6 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
 
             _serverProcess.BeginOutputReadLine();
             _serverProcess.BeginErrorReadLine();
-
-            _restartAttempts = 0;
-
-            _healthCheckTimer = new System.Threading.Timer(HealthCheckCallback, null,
-                TimeSpan.FromSeconds(_options.HealthCheckIntervalSeconds),
-                TimeSpan.FromSeconds(_options.HealthCheckIntervalSeconds));
 
             OnServerStatusChanged?.Invoke(true);
             OnServerOutput?.Invoke($"服务已启动 (PID: {_serverProcess.Id})");
@@ -158,6 +140,10 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
+        // Cancel any pending restart
+        _restartCts?.Cancel();
+        _restartCts = null;
+
         await _processLock.WaitAsync(cancellationToken);
         try
         {
@@ -183,6 +169,7 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
                 await _serverProcess.WaitForExitAsync(cancellationToken);
             }
 
+            _serverProcess.Exited -= OnServerExited;
             _serverProcess.Dispose();
             _serverProcess = null;
 
@@ -218,12 +205,73 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
         return "http://localhost:8096";
     }
 
+    private void OnServerExited(object? sender, EventArgs e)
+    {
+        if (_isStopping)
+        {
+            _logger.LogInformation("Server stopped intentionally, skipping restart");
+            return;
+        }
+
+        var exitCode = _serverProcess?.ExitCode ?? -1;
+        _logger.LogInformation("Server process exited with code {Code}", exitCode);
+        OnServerStatusChanged?.Invoke(false);
+        OnServerOutput?.Invoke($"服务进程已退出 (代码: {exitCode})");
+
+        if (_options.RestartOnCrash && exitCode != 0)
+        {
+            _restartAttempts++;
+            if (_restartAttempts > _options.MaxRestartAttempts)
+            {
+                _logger.LogWarning("Max restart attempts ({Max}) reached, not restarting", _options.MaxRestartAttempts);
+                OnServerOutput?.Invoke($"已达到最大重启次数 ({_options.MaxRestartAttempts})，不再重启");
+                return;
+            }
+
+            _logger.LogInformation("Scheduling restart attempt {Attempt}/{Max} in {Delay}s",
+                _restartAttempts, _options.MaxRestartAttempts, _options.RestartDelaySeconds);
+            OnServerOutput?.Invoke($"将在 {_options.RestartDelaySeconds} 秒后重启 (第 {_restartAttempts}/{_options.MaxRestartAttempts} 次)...");
+
+            _restartCts?.Cancel();
+            _restartCts = new CancellationTokenSource();
+            var ct = _restartCts.Token;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(_options.RestartDelaySeconds), ct);
+                    ct.ThrowIfCancellationRequested();
+                    await RestartAsync(ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation("Restart cancelled");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during restart");
+                }
+            });
+        }
+        else if (exitCode == 0)
+        {
+            _logger.LogInformation("Server exited cleanly (code 0), not restarting");
+            _restartAttempts = 0;
+        }
+    }
+
     private void HealthCheckCallback(object? state)
     {
         if (!IsRunning)
         {
             _logger.LogWarning("Health check failed: server process not running");
             OnServerStatusChanged?.Invoke(false);
+        }
+        else
+        {
+            // Server is healthy, reset restart counter
+            _restartAttempts = 0;
         }
     }
 
@@ -252,15 +300,15 @@ public sealed class ServerProcessManager : IServerProcessManager, IDisposable
 
     public void Dispose()
     {
+        _restartCts?.Cancel();
+        _restartCts?.Dispose();
         _healthCheckTimer?.Dispose();
-        _outputCts.Cancel();
-        _outputCts.Dispose();
-        _processLock.Dispose();
 
         if (_serverProcess != null && !_serverProcess.HasExited)
         {
             try { _serverProcess.Kill(); } catch { }
-            _serverProcess.Dispose();
         }
+        _serverProcess?.Dispose();
+        _processLock.Dispose();
     }
 }
