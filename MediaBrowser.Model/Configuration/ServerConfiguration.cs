@@ -288,4 +288,9 @@ public class ServerConfiguration : BaseApplicationConfiguration
     /// Gets or sets a value indicating whether old authorization methods are allowed.
     /// </summary>
     public bool EnableLegacyAuthorization { get; set; }
+
+    /// <summary>
+    /// Gets or sets the directory where app update APK files are stored.
+    /// </summary>
+    public string AppUpdateDirectory { get; set; } = string.Empty;
 }
