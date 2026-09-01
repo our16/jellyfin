@@ -240,6 +240,7 @@ pip-log.txt
 #########################
 # Build artifacts
 #########################
+artifacts/
 
 # Artifacts for debian-x64
 debian/.debhelper/
