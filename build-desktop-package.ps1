@@ -55,8 +55,10 @@ $WebDist = "$OutputDir\jellyfin-web\dist"
 New-Item -ItemType Directory -Path $WebDist -Force | Out-Null
 Copy-Item -Path "$WebSource\dist\*" -Destination $WebDist -Recurse -Force
 
-# 复制 desktop exe 到根目录（作为启动器）
-Copy-Item -Path "$OutputDir\desktop\Jellyfin.Desktop.exe" -Destination $OutputDir -Force
+# 复制 desktop 所有文件到根目录（作为启动器）
+Get-ChildItem "$OutputDir\desktop\Jellyfin.Desktop.*" | ForEach-Object {
+    Copy-Item -Path $_.FullName -Destination $OutputDir -Force
+}
 
 # 复制 server 内容到根目录
 Get-ChildItem "$OutputDir\server" | Where-Object { $_.Name -notin @("Jellyfin.Server.deps.json","Jellyfin.Server.runtimeconfig.json") } | ForEach-Object {
