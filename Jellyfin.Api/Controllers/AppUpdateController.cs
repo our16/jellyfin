@@ -254,6 +254,7 @@ public class AppUpdateController : BaseJellyfinApiController
 
             return new AppReleaseInfoDto
             {
+                Id = r.Id,
                 AppVersion = r.VersionString,
                 AppVersionCode = r.VersionCode,
                 ReleaseDate = r.ReleaseDate,
@@ -349,7 +350,6 @@ public class AppUpdateController : BaseJellyfinApiController
     /// <response code="404">Release not found.</response>
     /// <returns>An <see cref="OkResult"/>.</returns>
     [HttpDelete("Releases/{id:guid}")]
-    [Authorize(Policy = Policies.RequiresElevation)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteRelease(

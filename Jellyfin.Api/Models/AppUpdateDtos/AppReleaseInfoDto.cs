@@ -9,6 +9,11 @@ namespace Jellyfin.Api.Models.AppUpdateDtos;
 public class AppReleaseInfoDto
 {
     /// <summary>
+    /// Gets or sets the release id.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
     /// Gets or sets the version string.
     /// </summary>
     public string AppVersion { get; set; } = string.Empty;
