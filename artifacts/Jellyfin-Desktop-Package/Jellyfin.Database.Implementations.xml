@@ -319,6 +319,81 @@
             Gets or Sets the Child item.
             </summary>
         </member>
+        <member name="T:Jellyfin.Database.Implementations.Entities.AppRelease">
+            <summary>
+            Represents a client application release for update distribution.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.Id">
+            <summary>
+            Gets or sets the unique identifier.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.VersionString">
+            <summary>
+            Gets or sets the version string (e.g. "1.2.0").
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.VersionCode">
+            <summary>
+            Gets or sets the numeric version code (MAJOR×1000000 + MINOR×10000 + PATCH×100).
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.Channel">
+            <summary>
+            Gets or sets the release channel (stable, beta, alpha).
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.ReleaseDate">
+            <summary>
+            Gets or sets the release date.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.Changelog">
+            <summary>
+            Gets or sets the changelog as JSON (e.g. {"zh-CN": "...", "en": "..."}).
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.DownloadUrl">
+            <summary>
+            Gets or sets the download URL for the APK file.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.FileSize">
+            <summary>
+            Gets or sets the file size in bytes.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.Checksum">
+            <summary>
+            Gets or sets the checksum (format: "sha256:...").
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.Mandatory">
+            <summary>
+            Gets or sets a value indicating whether the update is mandatory.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.MinVersion">
+            <summary>
+            Gets or sets the minimum client version required.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.MinServerVersion">
+            <summary>
+            Gets or sets the minimum server version required.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.ReleaseNotesUrl">
+            <summary>
+            Gets or sets the URL to the full release notes page.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Database.Implementations.Entities.AppRelease.CreatedAt">
+            <summary>
+            Gets or sets the date the record was created.
+            </summary>
+        </member>
         <member name="T:Jellyfin.Database.Implementations.Entities.AttachmentStreamInfo">
             <summary>
             Provides information about an Attachment to an <see cref="T:Jellyfin.Database.Implementations.Entities.BaseItemEntity"/>.
@@ -4439,6 +4514,11 @@
             Gets the <see cref="T:Microsoft.EntityFrameworkCore.DbSet`1"/>.
             </summary>
         </member>
+        <member name="P:Jellyfin.Database.Implementations.JellyfinDbContext.AppReleases">
+            <summary>
+            Gets the <see cref="T:Microsoft.EntityFrameworkCore.DbSet`1"/> containing the app releases.
+            </summary>
+        </member>
         <member name="P:Jellyfin.Database.Implementations.JellyfinDbContext.KeyframeData">
             <summary>
             Gets the <see cref="T:Microsoft.EntityFrameworkCore.DbSet`1"/>.
@@ -4714,6 +4794,14 @@
             </summary>
         </member>
         <member name="M:Jellyfin.Database.Implementations.ModelConfiguration.ApiKeyConfiguration.Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder{Jellyfin.Database.Implementations.Entities.Security.ApiKey})">
+            <inheritdoc/>
+        </member>
+        <member name="T:Jellyfin.Database.Implementations.ModelConfiguration.AppReleaseConfiguration">
+            <summary>
+            AppRelease configuration.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Database.Implementations.ModelConfiguration.AppReleaseConfiguration.Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder{Jellyfin.Database.Implementations.Entities.AppRelease})">
             <inheritdoc/>
         </member>
         <member name="T:Jellyfin.Database.Implementations.ModelConfiguration.AttachmentStreamInfoConfiguration">

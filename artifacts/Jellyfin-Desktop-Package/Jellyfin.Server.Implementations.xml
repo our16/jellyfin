@@ -636,6 +636,35 @@
             <param name="path">The path to normalize.</param>
             <returns>The normalized path. </returns>
         </member>
+        <member name="T:Jellyfin.Server.Implementations.Item.AppUpdateRepository">
+            <summary>
+            App update repository implementation.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Server.Implementations.Item.AppUpdateRepository.#ctor(Microsoft.EntityFrameworkCore.IDbContextFactory{Jellyfin.Database.Implementations.JellyfinDbContext})">
+            <summary>
+            Initializes a new instance of the <see cref="T:Jellyfin.Server.Implementations.Item.AppUpdateRepository"/> class.
+            </summary>
+            <param name="dbProvider">The EFCore provider.</param>
+        </member>
+        <member name="M:Jellyfin.Server.Implementations.Item.AppUpdateRepository.GetLatestReleaseAsync(System.String,System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Server.Implementations.Item.AppUpdateRepository.GetReleasesAsync(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Server.Implementations.Item.AppUpdateRepository.GetReleaseAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Server.Implementations.Item.AppUpdateRepository.CreateReleaseAsync(Jellyfin.Database.Implementations.Entities.AppRelease,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Server.Implementations.Item.AppUpdateRepository.UpdateReleaseAsync(Jellyfin.Database.Implementations.Entities.AppRelease,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Server.Implementations.Item.AppUpdateRepository.DeleteReleaseAsync(System.Guid,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
         <member name="T:Jellyfin.Server.Implementations.Item.BaseItemMapper">
             <summary>
             Handles mapping between BaseItemEntity (database) and BaseItemDto (domain) objects.

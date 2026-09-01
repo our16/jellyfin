@@ -432,6 +432,118 @@
             <response code="204">Api key deleted.</response>
             <returns>A <see cref="T:Microsoft.AspNetCore.Mvc.NoContentResult"/>.</returns>
         </member>
+        <member name="T:Jellyfin.Api.Controllers.AppUpdateController">
+            <summary>
+            App update controller.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.#ctor(MediaBrowser.Controller.Persistence.IAppUpdateRepository,MediaBrowser.Common.Configuration.IApplicationPaths,MediaBrowser.Controller.Configuration.IServerConfigurationManager)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Jellyfin.Api.Controllers.AppUpdateController"/> class.
+            </summary>
+            <param name="appUpdateRepository">Instance of <see cref="T:MediaBrowser.Controller.Persistence.IAppUpdateRepository"/>.</param>
+            <param name="appPaths">Instance of <see cref="T:MediaBrowser.Common.Configuration.IApplicationPaths"/>.</param>
+            <param name="serverConfigurationManager">Instance of <see cref="T:MediaBrowser.Controller.Configuration.IServerConfigurationManager"/>.</param>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.CheckForUpdate(System.Int32,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Checks for an app update.
+            </summary>
+            <param name="currentVersionCode">Current client version code.</param>
+            <param name="currentVersion">Current client version string.</param>
+            <param name="channel">Release channel (stable, beta, alpha).</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <response code="200">Update check result returned.</response>
+            <returns>An <see cref="T:Microsoft.AspNetCore.Mvc.OkResult"/> containing the update info or no-update indicator.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.DownloadApk(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Downloads an APK file by version.
+            </summary>
+            <param name="version">Target version to download.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <response code="200">APK binary stream.</response>
+            <response code="404">Version not found.</response>
+            <returns>The APK file stream.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.UploadApk(System.String,System.Int32,System.String,System.Nullable{System.DateTime},System.String,System.Boolean,System.String,System.String,System.String,Microsoft.AspNetCore.Http.IFormFile,System.Threading.CancellationToken)">
+            <summary>
+            Uploads an APK and creates a release. Requires admin privileges.
+            The download URL is auto-generated as {server}/AppUpdate/Download?version={version}.
+            </summary>
+            <param name="versionString">Version string (e.g. "1.2.0").</param>
+            <param name="versionCode">Numeric version code.</param>
+            <param name="channel">Release channel.</param>
+            <param name="releaseDate">Release date.</param>
+            <param name="changelog">Changelog JSON.</param>
+            <param name="mandatory">Whether the update is mandatory.</param>
+            <param name="minVersion">Minimum client version.</param>
+            <param name="minServerVersion">Minimum server version.</param>
+            <param name="releaseNotesUrl">Release notes URL.</param>
+            <param name="file">The APK file.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <response code="200">Release created with download URL.</response>
+            <response code="400">Invalid request.</response>
+            <returns>The created release info.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.GetReleases(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Gets the list of available releases.
+            </summary>
+            <param name="channel">Optional channel filter.</param>
+            <param name="limit">Max results (default 10).</param>
+            <param name="offset">Pagination offset.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <response code="200">Release list returned.</response>
+            <returns>An <see cref="T:Microsoft.AspNetCore.Mvc.OkResult"/> containing the release list.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.CreateRelease(Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new app release. Requires admin privileges.
+            </summary>
+            <param name="dto">The release data.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <response code="200">Release created.</response>
+            <response code="400">Invalid release data.</response>
+            <returns>An <see cref="T:Microsoft.AspNetCore.Mvc.OkResult"/> containing the created release.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.UpdateRelease(System.Guid,Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto,System.Threading.CancellationToken)">
+            <summary>
+            Updates an existing app release. Requires admin privileges.
+            </summary>
+            <param name="id">The release id.</param>
+            <param name="dto">The release data.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <response code="200">Release updated.</response>
+            <response code="404">Release not found.</response>
+            <returns>An <see cref="T:Microsoft.AspNetCore.Mvc.OkResult"/> containing the updated release.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.DeleteRelease(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Deletes an app release. Requires admin privileges.
+            </summary>
+            <param name="id">The release id.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <response code="200">Release deleted.</response>
+            <response code="404">Release not found.</response>
+            <returns>An <see cref="T:Microsoft.AspNetCore.Mvc.OkResult"/>.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.GetApkDirectoryConfig">
+            <summary>
+            Gets the current APK storage directory.
+            </summary>
+            <response code="200">APK directory returned.</response>
+            <returns>The configured APK directory path.</returns>
+        </member>
+        <member name="M:Jellyfin.Api.Controllers.AppUpdateController.SetApkDirectoryConfig(Jellyfin.Api.Models.AppUpdateDtos.SetApkDirectoryRequest)">
+            <summary>
+            Sets the APK storage directory.
+            </summary>
+            <param name="directory">The new directory path.</param>
+            <response code="200">Directory updated.</response>
+            <response code="400">Invalid path.</response>
+            <returns>Success status.</returns>
+        </member>
         <member name="T:Jellyfin.Api.Controllers.ArtistsController">
             <summary>
             The artists controller.
@@ -7394,6 +7506,201 @@
         </member>
         <member name="M:Jellyfin.Api.ModelBinders.PipeDelimitedCollectionModelBinder.BindModelAsync(Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingContext)">
             <inheritdoc/>
+        </member>
+        <member name="T:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto">
+            <summary>
+            Request DTO for creating or updating a release (admin).
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.VersionString">
+            <summary>
+            Gets or sets the version string (e.g. "1.2.0").
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.VersionCode">
+            <summary>
+            Gets or sets the numeric version code.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.Channel">
+            <summary>
+            Gets or sets the release channel.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.ReleaseDate">
+            <summary>
+            Gets or sets the release date.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.Changelog">
+            <summary>
+            Gets or sets the changelog as JSON string.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.DownloadUrl">
+            <summary>
+            Gets or sets the download URL.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.FileSize">
+            <summary>
+            Gets or sets the file size in bytes.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.Checksum">
+            <summary>
+            Gets or sets the checksum (format: "sha256:...").
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.Mandatory">
+            <summary>
+            Gets or sets a value indicating whether the update is mandatory.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.MinVersion">
+            <summary>
+            Gets or sets the minimum client version.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.MinServerVersion">
+            <summary>
+            Gets or sets the minimum server version.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseDto.ReleaseNotesUrl">
+            <summary>
+            Gets or sets the release notes URL.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto">
+            <summary>
+            A single release entry in the release list.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.Id">
+            <summary>
+            Gets or sets the release id.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.AppVersion">
+            <summary>
+            Gets or sets the version string.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.AppVersionCode">
+            <summary>
+            Gets or sets the numeric version code.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.ReleaseDate">
+            <summary>
+            Gets or sets the release date.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.Channel">
+            <summary>
+            Gets or sets the release channel.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.Changelog">
+            <summary>
+            Gets or sets the changelog by locale.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.DownloadSize">
+            <summary>
+            Gets or sets the file size in bytes.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleaseInfoDto.Mandatory">
+            <summary>
+            Gets or sets a value indicating whether the update is mandatory.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Api.Models.AppUpdateDtos.AppReleasesResponse">
+            <summary>
+            Response DTO for the Get Release List endpoint.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppReleasesResponse.Releases">
+            <summary>
+            Gets or sets the list of releases.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse">
+            <summary>
+            Response DTO for the Check for Update endpoint.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.UpdateAvailable">
+            <summary>
+            Gets or sets a value indicating whether an update is available.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.AppVersion">
+            <summary>
+            Gets or sets the new version string.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.AppVersionCode">
+            <summary>
+            Gets or sets the numeric version code.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.MinVersion">
+            <summary>
+            Gets or sets the minimum client version required for force update.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.ReleaseDate">
+            <summary>
+            Gets or sets the release date.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.Changelog">
+            <summary>
+            Gets or sets the changelog by locale.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.DownloadUrl">
+            <summary>
+            Gets or sets the download URL.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.DownloadSize">
+            <summary>
+            Gets or sets the file size in bytes.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.Checksum">
+            <summary>
+            Gets or sets the checksum string.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.Mandatory">
+            <summary>
+            Gets or sets a value indicating whether the update is mandatory.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.MinServerVersion">
+            <summary>
+            Gets or sets the minimum server version.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.AppUpdateCheckResponse.ReleaseNotes">
+            <summary>
+            Gets or sets the release notes URL.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Api.Models.AppUpdateDtos.SetApkDirectoryRequest">
+            <summary>
+            Request DTO for setting the APK storage directory.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Api.Models.AppUpdateDtos.SetApkDirectoryRequest.Directory">
+            <summary>
+            Gets or sets the directory path for APK storage.
+            </summary>
         </member>
         <member name="T:Jellyfin.Api.Models.ClientLogDtos.ClientLogDocumentResponseDto">
             <summary>

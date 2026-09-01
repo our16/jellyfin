@@ -941,6 +941,11 @@
             Gets or sets a value indicating whether old authorization methods are allowed.
             </summary>
         </member>
+        <member name="P:MediaBrowser.Model.Configuration.ServerConfiguration.AppUpdateDirectory">
+            <summary>
+            Gets or sets the directory where app update APK files are stored.
+            </summary>
+        </member>
         <member name="T:MediaBrowser.Model.Configuration.TrickplayOptions">
             <summary>
             Class TrickplayOptions.

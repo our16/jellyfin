@@ -187,6 +187,15 @@
         <member name="M:Jellyfin.Database.Providers.Sqlite.Migrations.RemoveOrphanedUserPermissionsAndPreferences.BuildTargetModel(Microsoft.EntityFrameworkCore.ModelBuilder)">
             <inheritdoc />
         </member>
+        <member name="T:Jellyfin.Database.Providers.Sqlite.Migrations.AddAppReleaseTable">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Database.Providers.Sqlite.Migrations.AddAppReleaseTable.Up(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Database.Providers.Sqlite.Migrations.AddAppReleaseTable.Down(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
         <member name="T:Jellyfin.Database.Providers.Sqlite.Migrations.SqliteDesignTimeJellyfinDbFactory">
             <summary>
             The design time factory for <see cref="T:Jellyfin.Database.Implementations.JellyfinDbContext"/>.

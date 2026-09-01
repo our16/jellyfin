@@ -9390,6 +9390,63 @@
         <member name="P:MediaBrowser.Controller.Net.WebSocketMessages.Outbound.UserUpdatedMessage.MessageType">
             <inheritdoc />
         </member>
+        <member name="T:MediaBrowser.Controller.Persistence.IAppUpdateRepository">
+            <summary>
+            Interface for app update repository.
+            </summary>
+        </member>
+        <member name="M:MediaBrowser.Controller.Persistence.IAppUpdateRepository.GetLatestReleaseAsync(System.String,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Gets the latest release for a given channel with a version code higher than the specified value.
+            </summary>
+            <param name="channel">The release channel.</param>
+            <param name="currentVersionCode">The current client version code.</param>
+            <param name="cancellationToken">The cancellation token.</param>
+            <returns>The latest matching release, or null if none found.</returns>
+        </member>
+        <member name="M:MediaBrowser.Controller.Persistence.IAppUpdateRepository.GetReleasesAsync(System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Gets a list of releases, optionally filtered by channel.
+            </summary>
+            <param name="channel">Optional channel filter.</param>
+            <param name="limit">Max number of results.</param>
+            <param name="offset">Pagination offset.</param>
+            <param name="cancellationToken">The cancellation token.</param>
+            <returns>List of releases.</returns>
+        </member>
+        <member name="M:MediaBrowser.Controller.Persistence.IAppUpdateRepository.GetReleaseAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Gets a release by version string and channel.
+            </summary>
+            <param name="versionString">The version string.</param>
+            <param name="channel">The channel.</param>
+            <param name="cancellationToken">The cancellation token.</param>
+            <returns>The release, or null if not found.</returns>
+        </member>
+        <member name="M:MediaBrowser.Controller.Persistence.IAppUpdateRepository.CreateReleaseAsync(Jellyfin.Database.Implementations.Entities.AppRelease,System.Threading.CancellationToken)">
+            <summary>
+            Creates a new release.
+            </summary>
+            <param name="release">The release entity to create.</param>
+            <param name="cancellationToken">The cancellation token.</param>
+            <returns>The created release.</returns>
+        </member>
+        <member name="M:MediaBrowser.Controller.Persistence.IAppUpdateRepository.UpdateReleaseAsync(Jellyfin.Database.Implementations.Entities.AppRelease,System.Threading.CancellationToken)">
+            <summary>
+            Updates an existing release.
+            </summary>
+            <param name="release">The release entity to update.</param>
+            <param name="cancellationToken">The cancellation token.</param>
+            <returns>The updated release.</returns>
+        </member>
+        <member name="M:MediaBrowser.Controller.Persistence.IAppUpdateRepository.DeleteReleaseAsync(System.Guid,System.Threading.CancellationToken)">
+            <summary>
+            Deletes a release by id.
+            </summary>
+            <param name="id">The release id.</param>
+            <param name="cancellationToken">The cancellation token.</param>
+            <returns>True if deleted, false if not found.</returns>
+        </member>
         <member name="T:MediaBrowser.Controller.Persistence.IChapterRepository">
             <summary>
             Interface IChapterRepository.
