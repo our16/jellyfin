@@ -169,6 +169,11 @@ public class JellyfinDbContext(DbContextOptions<JellyfinDbContext> options, ILog
     public DbSet<BaseItemTrailerType> BaseItemTrailerTypes => Set<BaseItemTrailerType>();
 
     /// <summary>
+    /// Gets the <see cref="DbSet{TEntity}"/> containing the app releases.
+    /// </summary>
+    public DbSet<AppRelease> AppReleases => Set<AppRelease>();
+
+    /// <summary>
     /// Gets the <see cref="DbSet{TEntity}"/>.
     /// </summary>
     public DbSet<KeyframeData> KeyframeData => Set<KeyframeData>();
