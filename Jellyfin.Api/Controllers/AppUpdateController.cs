@@ -469,4 +469,35 @@ public class AppUpdateController : BaseJellyfinApiController
 
         return Ok(new { directory = directory.Directory });
     }
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
+    /// <summary>
+    /// Reports a playback error from the client.
+    /// </summary>
+    /// <param name="report">The error report.</param>
+    /// <response code="200">Report received.</response>
+    /// <returns>Success status.</returns>
+    [HttpPost("Report")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<object> ReportPlaybackError([FromBody] PlaybackErrorReportDto report)
+    {
+        if (report is null)
+        {
+            return BadRequest("Report cannot be null.");
+        }
+
+        // Save to log file
+        var logDir = Path.Combine(GetApkDirectory(), "logs");
+        Directory.CreateDirectory(logDir);
+
+        var logFile = Path.Combine(logDir, $"playback-errors-{DateTime.UtcNow:yyyyMMdd}.log");
+        var logEntry = JsonSerializer.Serialize(report, JsonOptions);
+        var logLine = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] {logEntry}{Environment.NewLine}";
+
+        System.IO.File.AppendAllText(logFile, logLine);
+
+        return Ok(new { received = true, timestamp = DateTime.UtcNow });
+    }
 }
