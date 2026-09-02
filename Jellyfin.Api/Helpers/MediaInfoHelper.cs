@@ -222,7 +222,14 @@ public class MediaInfoHelper
             options.SubtitleStreamIndex = subtitleStreamIndex;
         }
 
-        var user = _userManager.GetUserById(userId) ?? throw new ResourceNotFoundException();
+        var user = userId.IsEmpty()
+            ? null
+            : _userManager.GetUserById(userId);
+        if (user is null)
+        {
+            _logger.LogWarning("SetDeviceSpecificData: Could not resolve user for userId {UserId}", userId);
+            return;
+        }
 
         if (!enableDirectPlay)
         {

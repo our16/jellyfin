@@ -86,7 +86,9 @@ public class UserLibraryController : BaseJellyfinApiController
         [FromRoute, Required] Guid itemId)
     {
         userId = RequestHelpers.GetUserId(User, userId);
-        var user = _userManager.GetUserById(userId.Value);
+        var user = userId.Value.IsEmpty()
+            ? null
+            : _userManager.GetUserById(userId.Value);
         if (user is null)
         {
             return NotFound();
