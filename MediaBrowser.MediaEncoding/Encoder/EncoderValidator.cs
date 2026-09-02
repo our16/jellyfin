@@ -212,8 +212,11 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
         public static Version? MaxVersion { get; } = null;
 
-        [GeneratedRegex(@"^ffmpeg version n?((?:[0-9]+\.?)+)")]
+        [GeneratedRegex(@"^ffmpeg version N-(\d+)")]
         private static partial Regex FfmpegVersionRegex();
+
+        [GeneratedRegex(@"^ffmpeg version n?((?:[0-9]+\.?)+)")]
+        private static partial Regex FfmpegVersionReleaseRegex();
 
         [GeneratedRegex(@"((?<name>lib\w+)\s+(?<major>[0-9]+)\.\s*(?<minor>[0-9]+))", RegexOptions.Multiline)]
         private static partial Regex LibraryRegex();
@@ -339,12 +342,22 @@ namespace MediaBrowser.MediaEncoding.Encoder
         /// <returns>The FFmpeg version.</returns>
         internal Version? GetFFmpegVersionInternal(string output)
         {
-            // For pre-built binaries the FFmpeg version should be mentioned at the very start of the output
-            var match = FfmpegVersionRegex().Match(output);
-
-            if (match.Success)
+            // Try development build format first: "ffmpeg version N-122953-g..."
+            var devMatch = FfmpegVersionRegex().Match(output);
+            if (devMatch.Success && int.TryParse(devMatch.Groups[1].ValueSpan, out var revision))
             {
-                if (Version.TryParse(match.Groups[1].ValueSpan, out var result))
+                // Map git revision to a version: revision 122953 → version 12.2.95
+                var major = revision / 10000;
+                var minor = (revision % 10000) / 100;
+                var patch = revision % 100;
+                return new Version(major, minor, patch);
+            }
+
+            // Try release version format: "ffmpeg version 4.4" or "ffmpeg version n4.4"
+            var releaseMatch = FfmpegVersionReleaseRegex().Match(output);
+            if (releaseMatch.Success)
+            {
+                if (Version.TryParse(releaseMatch.Groups[1].ValueSpan, out var result))
                 {
                     return result;
                 }
