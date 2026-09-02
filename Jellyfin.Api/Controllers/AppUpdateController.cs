@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Api.Models.AppUpdateDtos;
@@ -33,13 +32,6 @@ public class AppUpdateController : BaseJellyfinApiController
 {
     private const int CopyBufferSize = 81920;
     private const string DefaultApkDirectory = @"F:\jellyfin_cache\apk_version";
-
-    private static readonly JsonSerializerOptions _camelCaseOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
-    };
 
     private readonly IAppUpdateRepository _appUpdateRepository;
     private readonly IApplicationPaths _appPaths;
@@ -72,7 +64,7 @@ public class AppUpdateController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the update info or no-update indicator.</returns>
     [HttpGet("Check")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult> CheckForUpdate(
+    public async Task<ActionResult<AppUpdateCheckResponse>> CheckForUpdate(
         [FromQuery, Required] int currentVersionCode,
         [FromQuery, Required] string currentVersion,
         [FromQuery] string channel = "stable",
@@ -82,7 +74,7 @@ public class AppUpdateController : BaseJellyfinApiController
 
         if (release is null)
         {
-            return new JsonResult(new AppUpdateCheckResponse { UpdateAvailable = false }, _camelCaseOptions);
+            return Ok(new AppUpdateCheckResponse { UpdateAvailable = false });
         }
 
         Dictionary<string, string>? changelog = null;
@@ -91,7 +83,7 @@ public class AppUpdateController : BaseJellyfinApiController
             changelog = JsonSerializer.Deserialize<Dictionary<string, string>>(release.Changelog);
         }
 
-        return new JsonResult(new AppUpdateCheckResponse
+        return Ok(new AppUpdateCheckResponse
         {
             UpdateAvailable = true,
             AppVersion = release.VersionString,
@@ -105,7 +97,7 @@ public class AppUpdateController : BaseJellyfinApiController
             Mandatory = release.Mandatory,
             MinServerVersion = release.MinServerVersion,
             ReleaseNotes = release.ReleaseNotesUrl
-        }, _camelCaseOptions);
+        });
     }
 
     /// <summary>
@@ -163,7 +155,7 @@ public class AppUpdateController : BaseJellyfinApiController
     [DisableRequestSizeLimit]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult> UploadApk(
+    public async Task<ActionResult<AppReleaseInfoDto>> UploadApk(
         [FromQuery, Required] string versionString,
         [FromQuery] int versionCode = 0,
         [FromQuery] string channel = "stable",
@@ -230,7 +222,7 @@ public class AppUpdateController : BaseJellyfinApiController
         };
 
         var created = await _appUpdateRepository.CreateReleaseAsync(release, cancellationToken).ConfigureAwait(false);
-        return new JsonResult(MapToDto(created), _camelCaseOptions);
+        return Ok(MapToDto(created));
     }
 
     /// <summary>
@@ -244,7 +236,7 @@ public class AppUpdateController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the release list.</returns>
     [HttpGet("Releases")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult> GetReleases(
+    public async Task<ActionResult<AppReleasesResponse>> GetReleases(
         [FromQuery] string? channel = null,
         [FromQuery] int limit = 10,
         [FromQuery] int offset = 0,
@@ -273,7 +265,7 @@ public class AppUpdateController : BaseJellyfinApiController
             };
         }).ToList();
 
-        return new JsonResult(new AppReleasesResponse { Releases = dtos }, _camelCaseOptions);
+        return Ok(new AppReleasesResponse { Releases = dtos });
     }
 
     /// <summary>
@@ -442,10 +434,10 @@ public class AppUpdateController : BaseJellyfinApiController
     [HttpGet("Config/Directory")]
     [Authorize(Policy = Policies.RequiresElevation)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult GetApkDirectoryConfig()
+    public ActionResult<object> GetApkDirectoryConfig()
     {
         var config = _serverConfigurationManager.Configuration;
-        return new JsonResult(new { directory = GetApkDirectory(), isDefault = string.IsNullOrEmpty(config.AppUpdateDirectory) }, _camelCaseOptions);
+        return Ok(new { directory = GetApkDirectory(), isDefault = string.IsNullOrEmpty(config.AppUpdateDirectory) });
     }
 
     /// <summary>
@@ -459,7 +451,7 @@ public class AppUpdateController : BaseJellyfinApiController
     [Authorize(Policy = Policies.RequiresElevation)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult SetApkDirectoryConfig([FromBody] SetApkDirectoryRequest directory)
+    public ActionResult<object> SetApkDirectoryConfig([FromBody] SetApkDirectoryRequest directory)
     {
         if (string.IsNullOrWhiteSpace(directory.Directory))
         {
@@ -475,6 +467,6 @@ public class AppUpdateController : BaseJellyfinApiController
         config.AppUpdateDirectory = directory.Directory;
         _serverConfigurationManager.SaveConfiguration("server", config);
 
-        return new JsonResult(new { directory = directory.Directory }, _camelCaseOptions);
+        return Ok(new { directory = directory.Directory });
     }
 }
