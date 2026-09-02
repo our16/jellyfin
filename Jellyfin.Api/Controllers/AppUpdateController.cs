@@ -479,7 +479,7 @@ public class AppUpdateController : BaseJellyfinApiController
     /// <response code="200">Report received.</response>
     /// <returns>Success status.</returns>
     [HttpPost("Report")]
-    [Authorize(Policy = Policies.RequiresElevation)]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<object> ReportPlaybackError([FromBody] PlaybackErrorReportDto report)
     {
