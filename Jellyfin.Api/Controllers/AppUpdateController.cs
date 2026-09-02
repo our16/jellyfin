@@ -117,7 +117,7 @@ public class AppUpdateController : BaseJellyfinApiController
     /// <response code="404">Version not found.</response>
     /// <returns>The APK file stream.</returns>
     [HttpGet("Download")]
-    [Authorize(Policy = Policies.RequiresElevation)]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DownloadApk(
