@@ -57,6 +57,12 @@
     <EmbeddedResource Include="Plugins\AudioDb\jellyfin-plugin-tadb.svg" />
   </ItemGroup>
 
+  <!-- Danmaku -->
+  <ItemGroup>
+    <None Remove="Plugins\Danmaku\Configuration\config.html" />
+    <EmbeddedResource Include="Plugins\Danmaku\Configuration\config.html" />
+  </ItemGroup>
+
   <!-- ListenBrainz -->
   <ItemGroup>
     <None Remove="Plugins\ListenBrainz\Configuration\config.html" />

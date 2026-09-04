@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Danmaku Plugin Configuration</title>
+</head>
+<body>
+    <div data-role="page" data-control="page" class="page type-interior pluginConfigurationPage" data-title="Danmaku">
+        <div data-role="content">
+            <div class="content-primary">
+                <h2>Danmaku Plugin Settings</h2>
+
+                <div class="verticalSection">
+                    <div class="sectionTitleContainer">
+                        <h2 class="sectionTitle">General</h2>
+                    </div>
+                    <div class="verticalSection">
+                        <label class="checkboxContainer">
+                            <span>Enable Danmaku</span>
+                            <input id="chkEnabled" type="checkbox" data-pluginoptions="true" />
+                        </label>
+                        <label class="checkboxContainer">
+                            <span>Default Enabled for New Playback</span>
+                            <input id="chkDefaultEnabled" type="checkbox" data-pluginoptions="true" />
+                        </label>
+                        <label class="checkboxContainer">
+                            <span>Auto Match Danmaku</span>
+                            <input id="chkAutoMatch" type="checkbox" data-pluginoptions="true" />
+                        </label>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <div class="sectionTitleContainer">
+                        <h2 class="sectionTitle">Cache</h2>
+                    </div>
+                    <div class="verticalSection">
+                        <div class="fieldDescription">
+                            <label for="txtMaxCacheSize">Max Cache Size (bytes)</label>
+                            <input id="txtMaxCacheSize" type="number" data-pluginoptions="true" min="0" />
+                        </div>
+                        <div class="fieldDescription">
+                            <label for="txtCacheExpiryDays">Cache Expiry (days)</label>
+                            <input id="txtCacheExpiryDays" type="number" data-pluginoptions="true" min="1" />
+                        </div>
+                        <div class="fieldDescription">
+                            <label for="txtMaxDanmakuCount">Max Danmaku Per Video</label>
+                            <input id="txtMaxDanmakuCount" type="number" data-pluginoptions="true" min="100" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <div class="sectionTitleContainer">
+                        <h2 class="sectionTitle">Default Display Settings</h2>
+                    </div>
+                    <div class="verticalSection">
+                        <div class="fieldDescription">
+                            <label for="selectFontSize">Font Size</label>
+                            <select id="selectFontSize" data-pluginoptions="true">
+                                <option value="18">Small (18)</option>
+                                <option value="25" selected>Standard (25)</option>
+                                <option value="36">Large (36)</option>
+                            </select>
+                        </div>
+                        <div class="fieldDescription">
+                            <label for="sliderOpacity">Opacity</label>
+                            <input id="sliderOpacity" type="range" min="0" max="100" value="80" data-pluginoptions="true" />
+                        </div>
+                        <div class="fieldDescription">
+                            <label for="sliderSpeed">Speed</label>
+                            <input id="sliderSpeed" type="range" min="50" max="200" value="100" data-pluginoptions="true" />
+                        </div>
+                        <div class="fieldDescription">
+                            <label for="sliderArea">Display Area</label>
+                            <input id="sliderArea" type="range" min="0" max="100" value="70" data-pluginoptions="true" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="verticalSection">
+                    <div class="sectionTitleContainer">
+                        <h2 class="sectionTitle">Update</h2>
+                    </div>
+                    <div class="verticalSection">
+                        <label class="checkboxContainer">
+                            <span>Auto Update</span>
+                            <input id="chkAutoUpdate" type="checkbox" data-pluginoptions="true" />
+                        </label>
+                        <div class="fieldDescription">
+                            <label for="txtUpdateInterval">Update Interval (hours)</label>
+                            <input id="txtUpdateInterval" type="number" data-pluginoptions="true" min="1" />
+                        </div>
+                        <label class="checkboxContainer">
+                            <span>Prefer Protobuf Format</span>
+                            <input id="chkPreferProtobuf" type="checkbox" data-pluginoptions="true" />
+                        </label>
+                    </div>
+                </div>
+
+                <br />
+                <button id="btnSave" type="button" data-role="button" data-icon="save" class="fab-submit">
+                    Save
+                </button>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var DanmakuConfigurationPage = {
+                currentConfig: null,
+
+                loadConfiguration: function () {
+                    var page = this;
+                    ApiClient.getPluginConfiguration(Jellyfin.plugins.getPlugin('danmaku').uniqueId).then(function (config) {
+                        page.currentConfig = config;
+
+                        $('#chkEnabled', page).prop('checked', config.Enabled);
+                        $('#chkDefaultEnabled', page).prop('checked', config.DefaultEnabled);
+                        $('#chkAutoMatch', page).prop('checked', config.AutoMatch);
+                        $('#txtMaxCacheSize', page).val(config.MaxCacheSize);
+                        $('#txtCacheExpiryDays', page).val(config.CacheExpiryDays);
+                        $('#txtMaxDanmakuCount', page).val(config.MaxDanmakuCount);
+
+                        if (config.DefaultDisplaySettings) {
+                            $('#selectFontSize', page).val(config.DefaultDisplaySettings.FontSize);
+                            $('#sliderOpacity', page).val(Math.round(config.DefaultDisplaySettings.Opacity * 100));
+                            $('#sliderSpeed', page).val(Math.round(config.DefaultDisplaySettings.Speed * 100));
+                            $('#sliderArea', page).val(Math.round(config.DefaultDisplaySettings.Area * 100));
+                        }
+
+                        if (config.UpdateSettings) {
+                            $('#chkAutoUpdate', page).prop('checked', config.UpdateSettings.AutoUpdate);
+                            $('#txtUpdateInterval', page).val(config.UpdateSettings.UpdateIntervalHours);
+                            $('#chkPreferProtobuf', page).prop('checked', config.UpdateSettings.PreferProtobuf);
+                        }
+                    });
+                },
+
+                saveConfiguration: function () {
+                    var page = this;
+                    var config = page.currentConfig || {};
+
+                    config.Enabled = $('#chkEnabled', page).prop('checked');
+                    config.DefaultEnabled = $('#chkDefaultEnabled', page).prop('checked');
+                    config.AutoMatch = $('#chkAutoMatch', page).prop('checked');
+                    config.MaxCacheSize = parseInt($('#txtMaxCacheSize', page).val() || '1073741824', 10);
+                    config.CacheExpiryDays = parseInt($('#txtCacheExpiryDays', page).val() || '30', 10);
+                    config.MaxDanmakuCount = parseInt($('#txtMaxDanmakuCount', page).val() || '5000', 10);
+
+                    config.DefaultDisplaySettings = config.DefaultDisplaySettings || {};
+                    config.DefaultDisplaySettings.FontSize = parseInt($('#selectFontSize', page).val() || '25', 10);
+                    config.DefaultDisplaySettings.Opacity = parseInt($('#sliderOpacity', page).val() || '80', 10) / 100;
+                    config.DefaultDisplaySettings.Speed = parseInt($('#sliderSpeed', page).val() || '100', 10) / 100;
+                    config.DefaultDisplaySettings.Area = parseInt($('#sliderArea', page).val() || '70', 10) / 100;
+
+                    config.UpdateSettings = config.UpdateSettings || {};
+                    config.UpdateSettings.AutoUpdate = $('#chkAutoUpdate', page).prop('checked');
+                    config.UpdateSettings.UpdateIntervalHours = parseInt($('#txtUpdateInterval', page).val() || '24', 10);
+                    config.UpdateSettings.PreferProtobuf = $('#chkPreferProtobuf', page).prop('checked');
+
+                    ApiClient.updatePluginConfiguration(Jellyfin.plugins.getPlugin('danmaku').uniqueId, config).then(function () {
+                        Dashboard.alert('Settings saved.');
+                    });
+                }
+            };
+
+            $(document).on('pageshow', '.pluginConfigurationPage', function () {
+                var page = this;
+                DanmakuConfigurationPage.loadConfiguration.call(page);
+                $('#btnSave', page).on('click', function () {
+                    DanmakuConfigurationPage.saveConfiguration.call(page);
+                });
+            });
+        </script>
+    </div>
+</body>
+</html>
