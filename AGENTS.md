@@ -97,6 +97,18 @@ powershell -ExecutionPolicy Bypass -File build-desktop-package.ps1
 
 **修复**: 使用官方 registry `npm ci --registry https://registry.npmjs.org`
 
+### 7. B站弹幕 API 限制
+
+**现象**: XML API (`comment.bilibili.com/{cid}.xml` 和 `api.bilibili.com/x/v1/dm/list.so`) 只返回最多 8000 条弹幕，但页面显示 9.7万
+
+**原因**: B站 XML API 有 `maxlimit` 限制，且只返回活跃弹幕
+
+**修复**: 使用 protobuf 分段 API `api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid={cid}&segment_index={n}`，可获取全部弹幕（约 35000+ 条）
+
+**实现**: 在 `MediaBrowser.Providers/Plugins/Danmaku/Sources/BilibiliSource.cs` 中，`GetDanmakuXmlAsync` 现在通过 `FetchProtobufDanmakuAsync` 循环获取所有分段，用 `ParseProtobufBytes` + `ParseDanmakuElem` 手动解析 protobuf wire format，最后用 `BuildXmlString` 转换为 XML 字符串
+
+**教训**: B站弹幕 API 有多种实现，XML API 有数量限制，protobuf API 无限制但需要手动解析二进制数据
+
 ## 关键文件
 
 | 文件 | 用途 |
