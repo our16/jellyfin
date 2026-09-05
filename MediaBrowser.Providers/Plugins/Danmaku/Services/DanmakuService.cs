@@ -215,7 +215,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
         /// <summary>
         /// Refresh danmaku for an item.
         /// </summary>
-        public async Task<string> RefreshDanmakuAsync(Guid itemId, string? source, bool force, CancellationToken ct)
+        public async Task<string> RefreshDanmakuAsync(Guid itemId, string? source, string? sourceId, int? sourceCid, bool force, CancellationToken ct)
         {
             var taskId = Guid.NewGuid().ToString("N")[..12];
             _pendingTasks[taskId] = new TaskCompletionSource<object?>();
@@ -247,11 +247,23 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
                             continue;
                         }
 
-                        var searchResults = await s.SearchAsync(item.Name ?? string.Empty, 1, ct).ConfigureAwait(false);
-                        if (searchResults.Length > 0)
+                        string? fetchSourceId = sourceId;
+                        int? fetchSourceCid = sourceCid;
+
+                        // If no direct sourceId provided, search by item name
+                        if (string.IsNullOrEmpty(fetchSourceId))
                         {
-                            var result = searchResults[0];
-                            var xml = await s.GetDanmakuXmlAsync(result.SourceId, result.SourceCid, ct).ConfigureAwait(false);
+                            var searchResults = await s.SearchAsync(item.Name ?? string.Empty, 1, ct).ConfigureAwait(false);
+                            if (searchResults.Length > 0)
+                            {
+                                fetchSourceId = searchResults[0].SourceId;
+                                fetchSourceCid = searchResults[0].SourceCid;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(fetchSourceId))
+                        {
+                            var xml = await s.GetDanmakuXmlAsync(fetchSourceId, fetchSourceCid, ct).ConfigureAwait(false);
                             if (xml != null)
                             {
                                 var items = s.ParseXml(xml);
@@ -259,10 +271,11 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
                                     itemId.ToString(),
                                     item.Name ?? "Unknown",
                                     s.Id,
-                                    result.SourceId,
+                                    fetchSourceId,
                                     xml,
                                     "xml",
                                     items.Length).ConfigureAwait(false);
+                                _logger.LogInformation("Refreshed danmaku for {ItemId}: {Count} items from {Source} (sourceId={SourceId})", itemId, items.Length, s.Id, fetchSourceId);
                             }
                         }
                     }

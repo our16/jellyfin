@@ -132,6 +132,8 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Api
             var taskId = await _danmakuService.RefreshDanmakuAsync(
                 itemId,
                 request?.Source,
+                request?.SourceId,
+                request?.SourceCid,
                 request?.Force ?? false,
                 ct).ConfigureAwait(false);
 
@@ -184,6 +186,18 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Api
         /// Gets or sets the source to refresh from.
         /// </summary>
         public string? Source { get; set; }
+
+        /// <summary>
+        /// Gets or sets the source ID (e.g., Bilibili BVID) to fetch danmaku for directly, bypassing search.
+        /// Example: "BV1UvfEB7EX9"
+        /// </summary>
+        public string? SourceId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the source CID (e.g., Bilibili CID) for direct fetch.
+        /// If not provided, will be resolved from SourceId.
+        /// </summary>
+        public int? SourceCid { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether to force refresh.

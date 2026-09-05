@@ -532,6 +532,16 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
             }
         }
 
+        private static int? GetCidCompat(JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.Number => element.TryGetInt32(out var i) ? i : null,
+                JsonValueKind.String when int.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) => parsed,
+                _ => null
+            };
+        }
+
         private async Task<int?> GetCidAsync(string bvid, CancellationToken ct)
         {
             try
@@ -551,10 +561,31 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
                 var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 using var doc = JsonDocument.Parse(json);
 
-                if (doc.RootElement.TryGetProperty("data", out var data) &&
-                    data.TryGetProperty("cid", out var cidProp))
+                var root = doc.RootElement;
+                if (root.TryGetProperty("code", out var codeProp) &&
+                    codeProp.ValueKind == JsonValueKind.Number &&
+                    codeProp.GetInt32() != 0)
                 {
-                    return cidProp.GetInt32();
+                    _logger.LogWarning("Bilibili view API returned code {Code} for BVID: {Bvid}", codeProp.GetInt32(), bvid);
+                    return null;
+                }
+
+                if (root.TryGetProperty("data", out var data) &&
+                    data.ValueKind == JsonValueKind.Object)
+                {
+                    // Prefer the first page's cid for multi-part videos, fall back to data.cid
+                    if (data.TryGetProperty("pages", out var pages) &&
+                        pages.ValueKind == JsonValueKind.Array &&
+                        pages.GetArrayLength() > 0 &&
+                        pages[0].TryGetProperty("cid", out var pageCid))
+                    {
+                        return GetCidCompat(pageCid);
+                    }
+
+                    if (data.TryGetProperty("cid", out var cidProp))
+                    {
+                        return GetCidCompat(cidProp);
+                    }
                 }
 
                 return null;
