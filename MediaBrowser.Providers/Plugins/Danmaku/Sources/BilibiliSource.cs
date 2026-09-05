@@ -148,35 +148,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
                     }
                 }
 
-                var client = _httpClientFactory.CreateClient();
-                var url = $"https://comment.bilibili.com/{cid.Value}.xml";
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
-                request.Headers.Add("Referer", "https://www.bilibili.com");
-
-                var response = await client.SendAsync(request, ct).ConfigureAwait(false);
-                if (response.StatusCode != HttpStatusCode.OK)
-                {
-                    _logger.LogWarning("Bilibili danmaku fetch returned status {Status} for CID {Cid}", response.StatusCode, cid.Value);
-                    return null;
-                }
-
-                var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
-
-                // Bilibili returns gzip-compressed XML
-                string xml;
-                if (bytes.Length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b)
-                {
-                    using var compressedStream = new MemoryStream(bytes);
-                    using var gzipStream = new System.IO.Compression.GZipStream(compressedStream, System.IO.Compression.CompressionMode.Decompress);
-                    using var reader = new StreamReader(gzipStream, Encoding.UTF8);
-                    xml = await reader.ReadToEndAsync(ct).ConfigureAwait(false);
-                }
-                else
-                {
-                    xml = Encoding.UTF8.GetString(bytes);
-                }
-
+                var xml = await FetchProtobufDanmakuAsync(cid.Value, ct).ConfigureAwait(false);
                 return xml;
             }
             catch (Exception ex)
@@ -184,6 +156,200 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
                 _logger.LogError(ex, "Error fetching Bilibili danmaku for {SourceId}", sourceId);
                 return null;
             }
+        }
+
+        private async Task<string?> FetchProtobufDanmakuAsync(int cid, CancellationToken ct)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var allItems = new List<DanmakuItem>();
+                int seg = 1;
+
+                while (true)
+                {
+                    var url = $"https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid={cid}&segment_index={seg}";
+                    var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    request.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
+                    request.Headers.Add("Referer", "https://www.bilibili.com");
+
+                    var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+                    if (response.StatusCode != HttpStatusCode.OK)
+                    {
+                        if (seg == 1)
+                        {
+                            _logger.LogWarning("Bilibili protobuf danmaku fetch returned {Status}", response.StatusCode);
+                            return null;
+                        }
+                        break;
+                    }
+
+                    var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                    if (bytes.Length < 10) break;
+
+                    var items = ParseProtobufBytes(bytes);
+                    allItems.AddRange(items);
+
+                    if (items.Length == 0) break;
+                    seg++;
+                }
+
+                return BuildXmlString(allItems, cid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching Bilibili protobuf danmaku");
+                return null;
+            }
+        }
+
+        private DanmakuItem[] ParseProtobufBytes(byte[] data)
+        {
+            var items = new List<DanmakuItem>();
+            int pos = 0;
+
+            while (pos < data.Length)
+            {
+                int tag = ReadVarint(data, ref pos);
+                int fieldNum = tag >> 3;
+                int wireType = tag & 0x07;
+
+                if (fieldNum == 1 && wireType == 2)
+                {
+                    int length = ReadVarint(data, ref pos);
+                    int end = pos + length;
+                    if (end > data.Length) break;
+
+                    var dm = ParseDanmakuElem(data, ref pos, end);
+                    if (dm != null) items.Add(dm);
+                }
+                else if (wireType == 0) { ReadVarint(data, ref pos); }
+                else if (wireType == 2) { int sl = ReadVarint(data, ref pos); pos += sl; }
+                else if (wireType == 1) { pos += 8; }
+                else if (wireType == 5) { pos += 4; }
+                else break;
+            }
+
+            return items.ToArray();
+        }
+
+        private DanmakuItem? ParseDanmakuElem(byte[] data, ref int pos, int end)
+        {
+            long id = 0;
+            int progress = 0;
+            int mode = 0;
+            int fontSize = 25;
+            int color = 0xFFFFFF;
+            string midHash = "";
+            string content = "";
+            int ctime = 0;
+
+            while (pos < end)
+            {
+                int tag = ReadVarint(data, ref pos);
+                int fieldNum = tag >> 3;
+                int wireType = tag & 0x07;
+
+                switch (fieldNum)
+                {
+                    case 1: id = ReadVarint64(data, ref pos); break;
+                    case 2: progress = ReadVarint(data, ref pos); break;
+                    case 3: mode = ReadVarint(data, ref pos); break;
+                    case 4: fontSize = ReadVarint(data, ref pos); break;
+                    case 5: color = ReadVarint(data, ref pos); break;
+                    case 6: midHash = ReadString(data, ref pos); break;
+                    case 7: content = ReadString(data, ref pos); break;
+                    case 8: ctime = ReadVarint(data, ref pos); break;
+                    case 9: break; // weight
+                    case 10: ReadString(data, ref pos); break; // action
+                    case 11: ReadVarint(data, ref pos); break; // pool
+                    case 12: ReadString(data, ref pos); break; // idStr
+                    default:
+                        if (wireType == 0) ReadVarint(data, ref pos);
+                        else if (wireType == 2) { int sl = ReadVarint(data, ref pos); pos += sl; }
+                        else if (wireType == 1) pos += 8;
+                        else if (wireType == 5) pos += 4;
+                        break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(content)) return null;
+
+            return new DanmakuItem
+            {
+                Id = id,
+                Time = progress / 1000f,
+                Type = mode,
+                FontSize = fontSize,
+                Color = color,
+                Timestamp = ctime,
+                Pool = 0,
+                UserIdHash = midHash,
+                Content = content,
+                Weight = 6
+            };
+        }
+
+        private static string BuildXmlString(List<DanmakuItem> items, int cid)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+            sb.AppendLine("<i>");
+            sb.AppendLine("  <chatserver>chat.bilibili.com</chatserver>");
+            sb.AppendLine("  <chatid>" + cid + "</chatid>");
+            sb.AppendLine("  <maxlimit>1500</maxlimit>");
+            sb.AppendLine("  <state>0</state>");
+            sb.AppendLine("  <real_name>0</real_name>");
+            sb.AppendLine("  <source>e-r</source>");
+
+            foreach (var dm in items)
+            {
+                sb.AppendLine("  <d p=\"" + dm.Time.ToString("F3", CultureInfo.InvariantCulture) + "," + dm.Type + "," + dm.FontSize + "," + dm.Color + "," + dm.Timestamp + ",0," + dm.UserIdHash + ",0\">" + XmlEscape(dm.Content) + "</d>");
+            }
+            sb.AppendLine("</i>");
+            return sb.ToString();
+        }
+
+        private static string XmlEscape(string text)
+        {
+            return text.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal).Replace(">", "&gt;", StringComparison.Ordinal).Replace("\"", "&quot;", StringComparison.Ordinal);
+        }
+
+        private static int ReadVarint(byte[] data, ref int pos)
+        {
+            int result = 0;
+            int shift = 0;
+            while (pos < data.Length)
+            {
+                byte b = data[pos++];
+                result |= (b & 0x7F) << shift;
+                if ((b & 0x80) == 0) break;
+                shift += 7;
+            }
+            return result;
+        }
+
+        private static long ReadVarint64(byte[] data, ref int pos)
+        {
+            long result = 0;
+            int shift = 0;
+            while (pos < data.Length)
+            {
+                byte b = data[pos++];
+                result |= (long)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0) break;
+                shift += 7;
+            }
+            return result;
+        }
+
+        private static string ReadString(byte[] data, ref int pos)
+        {
+            int len = ReadVarint(data, ref pos);
+            if (len < 0 || pos + len > data.Length) return "";
+            string s = Encoding.UTF8.GetString(data, pos, len);
+            pos += len;
+            return s;
         }
 
         /// <inheritdoc/>
