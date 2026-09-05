@@ -109,6 +109,40 @@ powershell -ExecutionPolicy Bypass -File build-desktop-package.ps1
 
 **教训**: B站弹幕 API 有多种实现，XML API 有数量限制，protobuf API 无限制但需要手动解析二进制数据
 
+### 8. SESSDATA Cookie 大幅提升弹幕量
+
+**现象**: 带 SESSDATA Cookie 请求 seg.so 首段返回 536KB，无 Cookie 仅 94KB（5.7 倍差距）
+
+**原因**: B站文档"部分视频在无 Cookie: SESSDATA 时只返回部分弹幕"——Cookie 可获取完整弹幕池
+
+**实现**: 
+- `PluginConfiguration.BilibiliSessdata` 配置字段
+- `DanmakuConfigManager` 单例管理运行时配置
+- `BilibiliSource.FetchProtobufDanmakuAsync` 请求时带 Cookie
+- 同时请求 `/x/v2/dm/web/view` 获取元数据（count, special_dms）
+- 下载 BAS/代码弹幕专包（mode=8/9，seg.so 不返回）
+
+### 9. B站 -352 风控（IP 级）
+
+**现象**: 短时间连续请求 seg.so 后返回 `{"code":-352,"message":"-352","ttl":1}`
+
+**原因**: IP 级滑动窗口风控，与 Cookie 无关，累积请求约 20 段后触发
+
+**恢复**: 等待 10-15 分钟冷却
+
+**规避策略**:
+- 分批拉取：15 段/批，内部间隔 4s，批间间隔 60±5s
+- 断点续传：记录最后成功段号到 `fetch-progress.txt`
+- 风控后等待 30s 重试，连续 5 次失败则停止
+
+### 10. GetCidAsync 大 CID 溢出
+
+**现象**: `FormatException: One of the identified items was in an invalid format` 对 CID=36189962748
+
+**原因**: B站 API 返回的 cid 是 int64，但代码用 `GetInt32()` 解析
+
+**修复**: 改用 `GetInt64()` 再转 `int`，增加 API 错误码检查
+
 ## 关键文件
 
 | 文件 | 用途 |
@@ -120,3 +154,10 @@ powershell -ExecutionPolicy Bypass -File build-desktop-package.ps1
 | `src/apps/modern/components/AppToolbar/DashboardButton.tsx` | 现代布局 Dashboard 按钮 |
 | `src/RootAppRouter.tsx` | 根路由 + legacy 布局 Dashboard 按钮 |
 | `src/apps/legacy/routes/user/settings/index.tsx` | Legacy 设置页 Dashboard 链接 |
+| `MediaBrowser.Providers/Plugins/Danmaku/Sources/BilibiliSource.cs` | B站弹幕源（protobuf + Cookie） |
+| `MediaBrowser.Providers/Plugins/Danmaku/Services/DanmakuService.cs` | 弹幕核心业务逻辑 |
+| `MediaBrowser.Providers/Plugins/Danmaku/Services/DanmakuCacheManager.cs` | 缓存管理 |
+| `MediaBrowser.Providers/Plugins/Danmaku/Configuration/PluginConfiguration.cs` | 插件配置（含 SESSDATA） |
+| `Jellyfin.Server/Startup.cs` | DI 服务注册 |
+| `test-danmaku/fetch-progress.txt` | 断点续传进度 |
+| `test-danmaku/bilibili-cookie-v3.bin` | 已拉取的 protobuf 原始数据 |
