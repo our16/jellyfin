@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using System.Threading;
 #pragma warning disable CA2016 // Do not forward CancellationToken to Task.Run
 using System.Threading.Tasks;
@@ -384,21 +385,25 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
         /// <summary>
         /// Gets or sets the download URL.
         /// </summary>
+        [JsonPropertyName("url")]
         public string Url { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the expiration timestamp.
         /// </summary>
+        [JsonPropertyName("expiresAt")]
         public long ExpiresAt { get; set; }
 
         /// <summary>
         /// Gets or sets the format.
         /// </summary>
+        [JsonPropertyName("format")]
         public string Format { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the file size.
         /// </summary>
+        [JsonPropertyName("fileSize")]
         public long FileSize { get; set; }
     }
 }
