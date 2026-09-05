@@ -32,6 +32,13 @@ namespace MediaBrowser.Providers.Plugins.Danmaku
         public string[] AutoMatchSources { get; set; } = new[] { "bilibili", "dandanplay" };
 
         /// <summary>
+        /// Gets or sets the Bilibili SESSDATA cookie for authenticated requests.
+        /// Required for full danmaku retrieval (up to 5x more danmaku with cookie).
+        /// Get it from browser DevTools → Application → Cookies → bilibili.com → SESSDATA.
+        /// </summary>
+        public string BilibiliSessdata { get; set; } = string.Empty;
+
+        /// <summary>
         /// Gets or sets the maximum cache size in bytes. Default 1GB.
         /// </summary>
         public long MaxCacheSize { get; set; } = 1073741824;
@@ -44,7 +51,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku
         /// <summary>
         /// Gets or sets the maximum number of danmaku items per video.
         /// </summary>
-        public int MaxDanmakuCount { get; set; } = 5000;
+        public int MaxDanmakuCount { get; set; } = 500000;
 
         /// <summary>
         /// Gets or sets the default display settings for danmaku rendering.

@@ -23,6 +23,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
         private readonly ILogger<DanmakuService> _logger;
         private readonly ILibraryManager _libraryManager;
         private readonly DanmakuCacheManager _cacheManager;
+        private readonly DanmakuConfigManager _configManager;
         private readonly BilibiliSource _bilibiliSource;
         private readonly DandanplaySource _dandanplaySource;
         private readonly LocalFileSource _localSource;
@@ -35,6 +36,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
             ILogger<DanmakuService> logger,
             ILibraryManager libraryManager,
             DanmakuCacheManager cacheManager,
+            DanmakuConfigManager configManager,
             BilibiliSource bilibiliSource,
             DandanplaySource dandanplaySource,
             LocalFileSource localSource)
@@ -42,9 +44,25 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
             _logger = logger;
             _libraryManager = libraryManager;
             _cacheManager = cacheManager;
+            _configManager = configManager;
             _bilibiliSource = bilibiliSource;
             _dandanplaySource = dandanplaySource;
             _localSource = localSource;
+
+            // Load Bilibili SESSDATA from plugin config
+            try
+            {
+                var pluginConfig = Plugin.Instance?.Configuration;
+                if (pluginConfig != null && !string.IsNullOrEmpty(pluginConfig.BilibiliSessdata))
+                {
+                    _configManager.BilibiliSessdata = pluginConfig.BilibiliSessdata;
+                    _logger.LogInformation("Loaded Bilibili SESSDATA from plugin config (length={Length})", _configManager.BilibiliSessdata.Length);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to load Bilibili SESSDATA from plugin config");
+            }
         }
 
         private IDanmakuSource[] AllSources => new IDanmakuSource[] { _localSource, _bilibiliSource, _dandanplaySource };

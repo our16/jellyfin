@@ -80,6 +80,7 @@ namespace Jellyfin.Server
 
             // Danmaku plugin services (embedded in MediaBrowser.Providers; host-registered
             // because IPluginServiceRegistrator is not invoked for host assemblies)
+            services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Services.DanmakuConfigManager>();
             services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Sources.BilibiliSource>();
             services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Sources.DandanplaySource>();
             services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Sources.LocalFileSource>();

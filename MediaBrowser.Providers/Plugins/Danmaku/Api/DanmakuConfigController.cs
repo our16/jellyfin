@@ -21,13 +21,15 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Api
     public class DanmakuConfigController : ControllerBase
     {
         private readonly DanmakuCacheManager _cacheManager;
+        private readonly DanmakuConfigManager _configManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DanmakuConfigController"/> class.
         /// </summary>
-        public DanmakuConfigController(DanmakuCacheManager cacheManager)
+        public DanmakuConfigController(DanmakuCacheManager cacheManager, DanmakuConfigManager configManager)
         {
             _cacheManager = cacheManager;
+            _configManager = configManager;
         }
 
         /// <summary>
@@ -52,6 +54,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Api
                 MaxCacheSize = config.MaxCacheSize,
                 CacheExpiryDays = config.CacheExpiryDays,
                 MaxDanmakuCount = config.MaxDanmakuCount,
+                BilibiliSessdata = config.BilibiliSessdata,
                 DefaultDisplaySettings = new DanmakuDisplaySettingsResponse
                 {
                     FontSize = config.DefaultDisplaySettings.FontSize,
@@ -93,6 +96,8 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Api
             config.MaxCacheSize = request.MaxCacheSize;
             config.CacheExpiryDays = request.CacheExpiryDays;
             config.MaxDanmakuCount = request.MaxDanmakuCount;
+            config.BilibiliSessdata = request.BilibiliSessdata;
+            _configManager.BilibiliSessdata = request.BilibiliSessdata;
 
             if (request.DefaultDisplaySettings != null)
             {

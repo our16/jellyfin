@@ -51,6 +51,13 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Models
         public int MaxDanmakuCount { get; set; }
 
         /// <summary>
+        /// Gets or sets the Bilibili SESSDATA cookie for authenticated requests.
+        /// Required for full danmaku retrieval (up to 5x more danmaku with cookie).
+        /// </summary>
+        [JsonPropertyName("bilibiliSessdata")]
+        public string BilibiliSessdata { get; set; } = string.Empty;
+
+        /// <summary>
         /// Gets or sets the default display settings.
         /// </summary>
         [JsonPropertyName("defaultDisplaySettings")]

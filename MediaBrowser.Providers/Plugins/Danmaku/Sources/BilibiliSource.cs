@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using MediaBrowser.Providers.Plugins.Danmaku.Models;
+using MediaBrowser.Providers.Plugins.Danmaku.Services;
 using Microsoft.Extensions.Logging;
 
 namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
@@ -17,18 +18,20 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
     /// <summary>
     /// Bilibili danmaku source adapter.
     /// </summary>
-    public class BilibiliSource : Services.IDanmakuSource
+    public class BilibiliSource : IDanmakuSource
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<BilibiliSource> _logger;
+        private readonly DanmakuConfigManager _configManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BilibiliSource"/> class.
         /// </summary>
-        public BilibiliSource(IHttpClientFactory httpClientFactory, ILogger<BilibiliSource> logger)
+        public BilibiliSource(IHttpClientFactory httpClientFactory, ILogger<BilibiliSource> logger, DanmakuConfigManager configManager)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _configManager = configManager;
         }
 
         /// <inheritdoc/>
@@ -164,14 +167,38 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
             {
                 var client = _httpClientFactory.CreateClient();
                 var allItems = new List<DanmakuItem>();
+                var sessdata = _configManager.BilibiliSessdata;
                 int seg = 1;
 
+                // Fetch metadata (count, special_dms) via view API
+                long totalCount = 0;
+                var specialDmUrls = new List<string>();
+                try
+                {
+                    var viewUrl = $"https://api.bilibili.com/x/v2/dm/web/view?type=1&oid={cid}";
+                    var viewReq = new HttpRequestMessage(HttpMethod.Get, viewUrl);
+                    AddBilibiliHeaders(viewReq, sessdata);
+                    var viewResp = await client.SendAsync(viewReq, ct).ConfigureAwait(false);
+                    if (viewResp.StatusCode == HttpStatusCode.OK)
+                    {
+                        var viewBytes = await viewResp.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                        var viewData = ParseWebViewReply(viewBytes);
+                        totalCount = viewData.Count;
+                        specialDmUrls.AddRange(viewData.SpecialDms);
+                        _logger.LogInformation("Bilibili view API: count={Count}, specialDms={SpecialCount}, segments={Total}", totalCount, specialDmUrls.Count, viewData.TotalSegments);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Failed to fetch Bilibili view metadata for cid {Cid}", cid);
+                }
+
+                // Fetch main danmaku segments
                 while (true)
                 {
                     var url = $"https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid={cid}&segment_index={seg}";
                     var request = new HttpRequestMessage(HttpMethod.Get, url);
-                    request.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
-                    request.Headers.Add("Referer", "https://www.bilibili.com");
+                    AddBilibiliHeaders(request, sessdata);
 
                     var response = await client.SendAsync(request, ct).ConfigureAwait(false);
                     if (response.StatusCode != HttpStatusCode.OK)
@@ -194,6 +221,31 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
                     seg++;
                 }
 
+                // Fetch BAS/code danmaku from special_dms packages
+                foreach (var specialUrl in specialDmUrls)
+                {
+                    try
+                    {
+                        var specialReq = new HttpRequestMessage(HttpMethod.Get, specialUrl);
+                        specialReq.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
+                        specialReq.Headers.Add("Referer", "https://www.bilibili.com");
+                        var specialResp = await client.SendAsync(specialReq, ct).ConfigureAwait(false);
+                        if (specialResp.StatusCode == HttpStatusCode.OK)
+                        {
+                            var specialBytes = await specialResp.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                            var specialItems = ParseProtobufBytes(specialBytes);
+                            allItems.AddRange(specialItems);
+                            _logger.LogInformation("Fetched {Count} BAS/code danmaku from special package", specialItems.Length);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to fetch special danmaku package from {Url}", specialUrl);
+                    }
+                }
+
+                _logger.LogInformation("Bilibili total danmaku for cid {Cid}: {Count} items from {Segments} segments (view API count: {ViewCount})", cid, allItems.Count, seg - 1, totalCount);
+
                 return BuildXmlString(allItems, cid);
             }
             catch (Exception ex)
@@ -201,6 +253,79 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
                 _logger.LogError(ex, "Error fetching Bilibili protobuf danmaku");
                 return null;
             }
+        }
+
+        private static void AddBilibiliHeaders(HttpRequestMessage request, string? sessdata)
+        {
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            request.Headers.Add("Referer", "https://www.bilibili.com");
+            if (!string.IsNullOrEmpty(sessdata))
+            {
+                request.Headers.Add("Cookie", $"SESSDATA={sessdata}");
+            }
+        }
+
+        private static (long Count, List<string> SpecialDms, int TotalSegments) ParseWebViewReply(byte[] data)
+        {
+            var result = (Count: 0L, SpecialDms: new List<string>(), TotalSegments: 0);
+            int pos = 0;
+
+            while (pos < data.Length)
+            {
+                int tag = ReadVarint(data, ref pos);
+                int fieldNum = tag >> 3;
+                int wireType = tag & 0x07;
+
+                if (wireType == 0)
+                {
+                    long val = ReadVarint64(data, ref pos);
+                    if (fieldNum == 8) result.Count = val; // count field
+                }
+                else if (wireType == 2)
+                {
+                    int len = ReadVarint(data, ref pos);
+                    int end = pos + len;
+                    if (end > data.Length) break;
+
+                    if (fieldNum == 4) // dm_sge (DmSegConfig)
+                    {
+                        // Parse DmSegConfig: field 1 = pageSize, field 2 = total
+                        int subPos = pos;
+                        while (subPos < end)
+                        {
+                            int subTag = ReadVarint(data, ref subPos);
+                            int subField = subTag >> 3;
+                            int subWire = subTag & 0x07;
+                            if (subWire == 0)
+                            {
+                                long subVal = ReadVarint64(data, ref subPos);
+                                if (subField == 2) result.TotalSegments = (int)subVal;
+                            }
+                            else if (subWire == 2)
+                            {
+                                int sl = ReadVarint(data, ref subPos);
+                                subPos += sl;
+                            }
+                            else break;
+                        }
+                    }
+                    else if (fieldNum == 6) // special_dms (repeated string)
+                    {
+                        string url = Encoding.UTF8.GetString(data, pos, len);
+                        if (url.StartsWith("http", StringComparison.Ordinal))
+                        {
+                            result.SpecialDms.Add(url);
+                        }
+                    }
+
+                    pos = end;
+                }
+                else if (wireType == 1) { pos += 8; }
+                else if (wireType == 5) { pos += 4; }
+                else break;
+            }
+
+            return result;
         }
 
         private DanmakuItem[] ParseProtobufBytes(byte[] data)
