@@ -63,11 +63,20 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
             var cachedContent = await _cacheManager.GetAsync(itemId.ToString()).ConfigureAwait(false);
             if (cachedContent != null)
             {
+                var cachedCount = 0;
+                int idx = 0;
+                while ((idx = cachedContent.IndexOf("<d ", idx, StringComparison.Ordinal)) >= 0)
+                {
+                    cachedCount++;
+                    idx += 3;
+                }
+
                 return new DanmakuFileInfo
                 {
                     ItemId = itemId,
                     MediaSourceId = mediaSourceId,
                     HasDanmaku = true,
+                    DanmakuCount = cachedCount,
                     Source = "cached",
                     Format = "xml",
                     LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds()

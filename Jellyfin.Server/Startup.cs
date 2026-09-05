@@ -78,6 +78,16 @@ namespace Jellyfin.Server
 
             services.AddJellyfinApiAuthorization();
 
+            // Danmaku plugin services (embedded in MediaBrowser.Providers; host-registered
+            // because IPluginServiceRegistrator is not invoked for host assemblies)
+            services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Sources.BilibiliSource>();
+            services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Sources.DandanplaySource>();
+            services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Sources.LocalFileSource>();
+            services.AddSingleton(sp => new MediaBrowser.Providers.Plugins.Danmaku.Services.DanmakuCacheManager(
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<MediaBrowser.Providers.Plugins.Danmaku.Services.DanmakuCacheManager>>(),
+                sp.GetRequiredService<MediaBrowser.Common.Configuration.IApplicationPaths>().DataPath));
+            services.AddSingleton<MediaBrowser.Providers.Plugins.Danmaku.Services.DanmakuService>();
+
             var productHeader = new ProductInfoHeaderValue(
                 _serverApplicationHost.Name.Replace(' ', '-'),
                 _serverApplicationHost.ApplicationVersionString);
