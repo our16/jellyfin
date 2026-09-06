@@ -49,7 +49,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
             _dandanplaySource = dandanplaySource;
             _localSource = localSource;
 
-            // Load Bilibili SESSDATA from plugin config
+            // Load Bilibili SESSDATA and dandanplay credentials from plugin config
             try
             {
                 var pluginConfig = Plugin.Instance?.Configuration;
@@ -57,6 +57,16 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
                 {
                     _configManager.BilibiliSessdata = pluginConfig.BilibiliSessdata;
                     _logger.LogInformation("Loaded Bilibili SESSDATA from plugin config (length={Length})", _configManager.BilibiliSessdata.Length);
+                }
+
+                if (pluginConfig != null)
+                {
+                    _configManager.DandanplayAppId = pluginConfig.DandanplayAppId ?? string.Empty;
+                    _configManager.DandanplayAppSecret = pluginConfig.DandanplayAppSecret ?? string.Empty;
+                    if (!string.IsNullOrEmpty(_configManager.DandanplayAppId))
+                    {
+                        _logger.LogInformation("Loaded dandanplay credentials from plugin config");
+                    }
                 }
             }
             catch (Exception ex)

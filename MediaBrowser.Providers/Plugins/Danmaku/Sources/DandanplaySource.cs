@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,15 +21,17 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<DandanplaySource> _logger;
-        private const string BaseUrl = "https://www.dandanplay.com";
+        private readonly Services.DanmakuConfigManager _configManager;
+        private const string BaseUrl = "https://api.dandanplay.net";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DandanplaySource"/> class.
         /// </summary>
-        public DandanplaySource(IHttpClientFactory httpClientFactory, ILogger<DandanplaySource> logger)
+        public DandanplaySource(IHttpClientFactory httpClientFactory, ILogger<DandanplaySource> logger, Services.DanmakuConfigManager configManager)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
+            _configManager = configManager;
         }
 
         /// <inheritdoc/>
@@ -52,12 +55,20 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
         /// <inheritdoc/>
         public async Task<DanmakuSearchResult[]> SearchAsync(string keyword, int limit, CancellationToken ct)
         {
+            // The dandanplay open API requires AppId/AppSecret credentials; skip silently when unconfigured
+            if (string.IsNullOrEmpty(_configManager.DandanplayAppId) || string.IsNullOrEmpty(_configManager.DandanplayAppSecret))
+            {
+                _logger.LogDebug("Dandanplay skipped: no AppId/AppSecret configured");
+                return Array.Empty<DanmakuSearchResult>();
+            }
+
             try
             {
                 var client = _httpClientFactory.CreateClient();
                 var url = $"{BaseUrl}/api/v2/search/anime?keyword={Uri.EscapeDataString(keyword)}";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
+                AddDandanplayAuth(request);
 
                 var response = await client.SendAsync(request, ct).ConfigureAwait(false);
                 if (response.StatusCode != HttpStatusCode.OK)
@@ -117,12 +128,19 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
         /// <inheritdoc/>
         public async Task<string?> GetDanmakuXmlAsync(string sourceId, int? sourceCid, CancellationToken ct)
         {
+            if (string.IsNullOrEmpty(_configManager.DandanplayAppId) || string.IsNullOrEmpty(_configManager.DandanplayAppSecret))
+            {
+                _logger.LogDebug("Dandanplay skipped: no AppId/AppSecret configured");
+                return null;
+            }
+
             try
             {
                 var client = _httpClientFactory.CreateClient();
                 var url = $"{BaseUrl}/api/v2/comment/{Uri.EscapeDataString(sourceId)}?format=xml";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
+                AddDandanplayAuth(request);
 
                 var response = await client.SendAsync(request, ct).ConfigureAwait(false);
                 if (response.StatusCode != HttpStatusCode.OK)
@@ -138,6 +156,27 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
                 _logger.LogError(ex, "Error fetching Dandanplay danmaku for {SourceId}", sourceId);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Adds the dandanplay open API auth headers (X-AppId / X-Timestamp / X-Signature).
+        /// </summary>
+        private void AddDandanplayAuth(HttpRequestMessage request)
+        {
+            var appId = _configManager.DandanplayAppId;
+            var secret = _configManager.DandanplayAppSecret;
+            if (string.IsNullOrEmpty(appId) || string.IsNullOrEmpty(secret))
+            {
+                return;
+            }
+
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+            using var hmac = new System.Security.Cryptography.HMACSHA256(Encoding.UTF8.GetBytes(secret));
+            var signature = Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(appId + timestamp)));
+
+            request.Headers.Add("X-AppId", appId);
+            request.Headers.Add("X-Timestamp", timestamp);
+            request.Headers.Add("X-Signature", signature);
         }
 
         /// <inheritdoc/>

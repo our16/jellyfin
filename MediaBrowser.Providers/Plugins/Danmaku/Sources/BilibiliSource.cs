@@ -58,6 +58,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
             try
             {
                 var client = _httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(20);
                 var url = $"https://api.bilibili.com/x/web-interface/search/all/v2?keyword={Uri.EscapeDataString(keyword)}&page=1&pagesize={limit}";
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
@@ -105,7 +106,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
                         var title = item.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? string.Empty : string.Empty;
                         var duration = item.TryGetProperty("duration", out var durationProp) ? durationProp.GetString() ?? "0" : "0";
                         var pic = item.TryGetProperty("pic", out var picProp) ? picProp.GetString() : null;
-                        var aid = item.TryGetProperty("aid", out var aidProp) ? aidProp.GetInt64() : 0;
+                        var aid = item.TryGetProperty("aid", out var aidProp) ? GetCidCompat(aidProp) ?? 0 : 0;
 
                         // Strip HTML tags from title
                         title = System.Text.RegularExpressions.Regex.Replace(title, "<[^>]+>", string.Empty);
@@ -166,6 +167,7 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
             try
             {
                 var client = _httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(30);
                 var allItems = new List<DanmakuItem>();
                 var sessdata = _configManager.BilibiliSessdata;
                 int seg = 1;
@@ -429,9 +431,32 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
 
             foreach (var dm in items)
             {
-                sb.AppendLine("  <d p=\"" + dm.Time.ToString("F3", CultureInfo.InvariantCulture) + "," + dm.Type + "," + dm.FontSize + "," + dm.Color + "," + dm.Timestamp + ",0," + dm.UserIdHash + ",0\">" + XmlEscape(dm.Content) + "</d>");
+                sb.AppendLine("  <d p=\"" + dm.Time.ToString("F3", CultureInfo.InvariantCulture) + "," + dm.Type + "," + dm.FontSize + "," + dm.Color + "," + dm.Timestamp + ",0," + dm.UserIdHash + ",0\">" + XmlEscape(SanitizeXmlText(dm.Content)) + "</d>");
             }
             sb.AppendLine("</i>");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Removes control characters that are invalid in XML 1.0 documents
+        /// (bilibili danmaku sometimes contains them, e.g. 0x01).
+        /// </summary>
+        private static string SanitizeXmlText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return text;
+            }
+
+            var sb = new StringBuilder(text.Length);
+            foreach (var c in text)
+            {
+                if (c >= 0x20 || c == '\t' || c == '\n' || c == '\r')
+                {
+                    sb.Append(c);
+                }
+            }
+
             return sb.ToString();
         }
 
@@ -544,57 +569,70 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Sources
 
         private async Task<int?> GetCidAsync(string bvid, CancellationToken ct)
         {
-            try
+            for (var attempt = 1; attempt <= 2; attempt++)
             {
-                var client = _httpClientFactory.CreateClient();
-                var url = $"https://api.bilibili.com/x/web-interface/view?bvid={Uri.EscapeDataString(bvid)}";
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Add("User-Agent", "Jellyfin-Danmaku-Plugin/1.0");
-                request.Headers.Add("Referer", "https://www.bilibili.com");
-
-                var response = await client.SendAsync(request, ct).ConfigureAwait(false);
-                if (response.StatusCode != HttpStatusCode.OK)
+                try
                 {
-                    return null;
-                }
+                    var client = _httpClientFactory.CreateClient();
+                    client.Timeout = TimeSpan.FromSeconds(20);
+                    var url = $"https://api.bilibili.com/x/web-interface/view?bvid={Uri.EscapeDataString(bvid)}";
+                    var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                    request.Headers.Add("Referer", "https://www.bilibili.com");
 
-                var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                using var doc = JsonDocument.Parse(json);
-
-                var root = doc.RootElement;
-                if (root.TryGetProperty("code", out var codeProp) &&
-                    codeProp.ValueKind == JsonValueKind.Number &&
-                    codeProp.GetInt32() != 0)
-                {
-                    _logger.LogWarning("Bilibili view API returned code {Code} for BVID: {Bvid}", codeProp.GetInt32(), bvid);
-                    return null;
-                }
-
-                if (root.TryGetProperty("data", out var data) &&
-                    data.ValueKind == JsonValueKind.Object)
-                {
-                    // Prefer the first page's cid for multi-part videos, fall back to data.cid
-                    if (data.TryGetProperty("pages", out var pages) &&
-                        pages.ValueKind == JsonValueKind.Array &&
-                        pages.GetArrayLength() > 0 &&
-                        pages[0].TryGetProperty("cid", out var pageCid))
+                    var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+                    if (response.StatusCode != HttpStatusCode.OK)
                     {
-                        return GetCidCompat(pageCid);
+                        _logger.LogWarning("Bilibili view API returned status {Status} for BVID: {Bvid}", response.StatusCode, bvid);
+                        return null;
                     }
 
-                    if (data.TryGetProperty("cid", out var cidProp))
-                    {
-                        return GetCidCompat(cidProp);
-                    }
-                }
+                    var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    using var doc = JsonDocument.Parse(json);
 
-                return null;
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("code", out var codeProp) &&
+                        codeProp.ValueKind == JsonValueKind.Number &&
+                        codeProp.GetInt32() != 0)
+                    {
+                        _logger.LogWarning("Bilibili view API returned code {Code} for BVID: {Bvid}", codeProp.GetInt32(), bvid);
+                        return null;
+                    }
+
+                    if (root.TryGetProperty("data", out var data) &&
+                        data.ValueKind == JsonValueKind.Object)
+                    {
+                        // Prefer the first page's cid for multi-part videos, fall back to data.cid
+                        if (data.TryGetProperty("pages", out var pages) &&
+                            pages.ValueKind == JsonValueKind.Array &&
+                            pages.GetArrayLength() > 0 &&
+                            pages[0].TryGetProperty("cid", out var pageCid))
+                        {
+                            return GetCidCompat(pageCid);
+                        }
+
+                        if (data.TryGetProperty("cid", out var cidProp))
+                        {
+                            return GetCidCompat(cidProp);
+                        }
+                    }
+
+                    return null;
+                }
+                catch (Exception ex) when (attempt < 2)
+                {
+                    // Network hiccup / timeout: retry once before giving up
+                    _logger.LogWarning("Bilibili view API attempt {Attempt} failed for {Bvid}: {Message}", attempt, bvid, ex.Message);
+                    await Task.Delay(1000, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error getting CID for BVID: {Bvid}", bvid);
+                    return null;
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting CID for BVID: {Bvid}", bvid);
-                return null;
-            }
+
+            return null;
         }
 
         private static int ParseDuration(string duration)

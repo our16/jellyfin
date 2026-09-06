@@ -36,7 +36,20 @@ namespace MediaBrowser.Providers.Plugins.Danmaku
         /// Required for full danmaku retrieval (up to 5x more danmaku with cookie).
         /// Get it from browser DevTools → Application → Cookies → bilibili.com → SESSDATA.
         /// </summary>
+        /// <summary>
+        /// Gets or sets the Bilibili SESSDATA cookie for authenticated danmaku fetching.
+        /// </summary>
         public string BilibiliSessdata { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the dandanplay open API AppId.
+        /// </summary>
+        public string DandanplayAppId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the dandanplay open API AppSecret.
+        /// </summary>
+        public string DandanplayAppSecret { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets the maximum cache size in bytes. Default 1GB.
