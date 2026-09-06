@@ -1,5 +1,8 @@
 .directory
 
+# Temporary files
+test-danmaku/
+
 #################
 ## Eclipse
 #################
