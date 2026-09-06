@@ -78,6 +78,42 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
         private IDanmakuSource[] AllSources => new IDanmakuSource[] { _localSource, _bilibiliSource, _dandanplaySource };
 
         /// <summary>
+        /// Finds a danmaku sidecar file next to the video (same folder, same base name, .xml).
+        /// This follows the video file location, so moving folders never breaks danmaku loading.
+        /// </summary>
+        private static string? FindSidecarDanmakuPath(BaseItem item)
+        {
+            var videoPath = item.Path;
+            if (string.IsNullOrEmpty(videoPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                var sidecar = System.IO.Path.ChangeExtension(videoPath, ".xml");
+                return System.IO.File.Exists(sidecar) ? sidecar : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static int CountDanmakuEntries(string xml)
+        {
+            var count = 0;
+            int idx = 0;
+            while ((idx = xml.IndexOf("<d ", idx, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                idx += 3;
+            }
+
+            return count;
+        }
+
+        /// <summary>
         /// Get danmaku info for an item.
         /// </summary>
         public async Task<DanmakuFileInfo?> GetDanmakuInfoAsync(Guid itemId, string? mediaSourceId, CancellationToken ct)
@@ -86,6 +122,31 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
             if (item == null)
             {
                 return null;
+            }
+
+            // P0: video sidecar danmaku (same folder, same base name) - read directly, no cache involved
+            var sidecarPath = FindSidecarDanmakuPath(item);
+            if (sidecarPath != null)
+            {
+                try
+                {
+                    var sidecarContent = await System.IO.File.ReadAllTextAsync(sidecarPath, ct).ConfigureAwait(false);
+                    return new DanmakuFileInfo
+                    {
+                        ItemId = itemId,
+                        MediaSourceId = mediaSourceId,
+                        HasDanmaku = true,
+                        DanmakuCount = CountDanmakuEntries(sidecarContent),
+                        Source = "local",
+                        SourceId = System.IO.Path.GetFileName(sidecarPath),
+                        Format = "xml",
+                        LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                    };
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to read danmaku sidecar for {ItemId}: {Path}", itemId, sidecarPath);
+                }
             }
 
             // Check cache first
@@ -207,6 +268,24 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
         /// </summary>
         public async Task<string?> GetDanmakuRawAsync(Guid itemId, string? mediaSourceId, CancellationToken ct)
         {
+            var item = _libraryManager.GetItemById(itemId);
+            if (item != null)
+            {
+                // P0: video sidecar danmaku - read directly from disk each time, no cache
+                var sidecarPath = FindSidecarDanmakuPath(item);
+                if (sidecarPath != null)
+                {
+                    try
+                    {
+                        return await System.IO.File.ReadAllTextAsync(sidecarPath, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to read danmaku sidecar for {ItemId}: {Path}", itemId, sidecarPath);
+                    }
+                }
+            }
+
             var cached = await _cacheManager.GetAsync(itemId.ToString()).ConfigureAwait(false);
             if (cached != null)
             {
@@ -244,6 +323,23 @@ namespace MediaBrowser.Providers.Plugins.Danmaku.Services
                     if (force)
                     {
                         await _cacheManager.DeleteAsync(itemId.ToString()).ConfigureAwait(false);
+                    }
+
+                    // P0: video sidecar danmaku - follows the video file, no cache needed
+                    var sidecarPath = FindSidecarDanmakuPath(item);
+                    if (sidecarPath != null)
+                    {
+                        try
+                        {
+                            var sidecarContent = await System.IO.File.ReadAllTextAsync(sidecarPath, ct).ConfigureAwait(false);
+                            _logger.LogInformation("Danmaku sidecar found for {ItemId}: {Path} ({Count} entries)", itemId, sidecarPath, CountDanmakuEntries(sidecarContent));
+                            _pendingTasks[taskId].SetResult(null);
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to read danmaku sidecar for {ItemId}: {Path}", itemId, sidecarPath);
+                        }
                     }
 
                     var sources = source != null
